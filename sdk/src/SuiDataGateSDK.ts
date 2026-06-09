@@ -31,7 +31,7 @@ export class SuiDataGateSDK {
     private isPaused: boolean = false;
 
     // TODO: Load these from environment or config
-    private PACKAGE_ID = process.env.SUI_DATA_GATE_PACKAGE_ID || "0x0";
+    private PACKAGE_ID = process.env.SUI_DATA_GATE_PACKAGE_ID || "0xb05b3964df8b88a86cda6b192893399966014af9dd6fc6beb26f1343a0495495";
     private SUI_CLOCK = "0x6"; 
     
     constructor(config: SuiDataGateConfig) {
