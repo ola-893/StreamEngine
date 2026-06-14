@@ -108,23 +108,38 @@ export default function AgentCreatePage({
     return true;
   };
 
-  const handleDeploy = () => {
-    const newAgent: Agent = {
-      id: `agent-${Date.now()}`,
-      name: agent.name,
-      description: agent.description,
-      purpose: agent.purpose,
-      selectedEndpoints: agent.selectedEndpoints,
-      maxBudgetSui: agent.maxBudgetSui,
-      currentSpendSui: 0,
-      autoRefill: agent.autoRefill,
-      scrapeInterval: agent.scrapeInterval,
-      status: "active",
-      createdAt: new Date().toISOString(),
-      totalRequests: 0,
-    };
-    onDeploy(newAgent);
-    setDeployed(true);
+  const handleDeploy = async () => {
+    try {
+      const res = await fetch("http://localhost:3001/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: agent.name,
+          description: agent.description,
+          purpose: agent.purpose,
+          budgetMist: Math.floor(agent.maxBudgetSui * 1_000_000_000)
+        })
+      });
+      const data = await res.json();
+      const newAgent: Agent = {
+        id: data.id,
+        name: data.name,
+        description: data.description || "",
+        purpose: data.purpose,
+        selectedEndpoints: agent.selectedEndpoints,
+        maxBudgetSui: data.budgetMist / 1_000_000_000,
+        currentSpendSui: data.spentMist / 1_000_000_000,
+        autoRefill: agent.autoRefill,
+        scrapeInterval: agent.scrapeInterval,
+        status: "active",
+        createdAt: data.createdAt,
+        totalRequests: 0,
+      };
+      onDeploy(newAgent);
+      setDeployed(true);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const stepLabels = [

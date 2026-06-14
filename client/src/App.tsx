@@ -160,6 +160,37 @@ export default function App() {
   // Agent state management
   const [agents, setAgents] = useState<Agent[]>([]);
 
+  const fetchAgents = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/agents`);
+      if (res.ok) {
+        const data = await res.json();
+        // map backend agent to frontend Agent
+        const mapped = data.map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          description: a.description || "",
+          purpose: a.purpose,
+          selectedEndpoints: [],
+          maxBudgetSui: a.budgetMist / 1_000_000_000,
+          currentSpendSui: a.spentMist / 1_000_000_000,
+          autoRefill: false,
+          scrapeInterval: "30s",
+          status: "active",
+          createdAt: a.createdAt,
+          totalRequests: 0,
+        }));
+        setAgents(mapped);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAgents();
+  }, [fetchAgents]);
+
   const handleAddAgent = (agent: Agent) => {
     setAgents((prev) => [agent, ...prev]);
   };

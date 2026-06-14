@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { SuiDataGateSDK } from "../lib/SuiDataGateSDK";
 import { motion, AnimatePresence } from "motion/react";
 import { Agent, Endpoint } from "../types";
 import {
@@ -18,6 +19,43 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+
+function StreamBalancePoller({ streamId, onBalanceUpdate }: { streamId: string; onBalanceUpdate: (balanceSui: number) => void }) {
+  const onUpdateRef = React.useRef(onBalanceUpdate);
+  useEffect(() => {
+    onUpdateRef.current = onBalanceUpdate;
+  }, [onBalanceUpdate]);
+
+  useEffect(() => {
+    let isActive = true;
+    
+    const poll = async () => {
+      try {
+        const res = await fetch(`http://localhost:3001/api/streams/${streamId}/balance`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isActive) {
+            onUpdateRef.current(data.balanceMist / 1_000_000_000);
+          }
+        }
+      } catch (e) {
+        console.error("Polling error", e);
+      }
+    };
+    
+    // Initial fetch
+    poll();
+    
+    // Poll every 5s
+    const interval = setInterval(poll, 5000);
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+    };
+  }, [streamId]);
+  
+  return null; // purely logic component
+}
 
 interface AgentDashboardPageProps {
   agents: Agent[];
@@ -297,27 +335,97 @@ export default function AgentDashboardPage({
                           </div>
                         </div>
 
-                        {/* Connected Endpoints */}
-                        <div>
-                          <span className="text-xs font-sans text-stone-400 font-medium block mb-2">Connected Endpoints</span>
-                          <div className="space-y-2">
-                            {agentEndpoints.map((ep) => (
-                              <div key={ep.id} className="flex items-center justify-between p-3 bg-white border border-stone-100 rounded-xl">
-                                <div className="flex items-center gap-2.5">
-                                  <Globe className="w-4 h-4 text-stone-400" />
-                                  <div>
-                                    <span className="font-sans text-xs font-bold">{ep.name}</span>
-                                    <span className="text-xs text-stone-400 ml-2">{ep.latency}ms</span>
+                        {/* Connected and Available Endpoints */}
+                        <div className="space-y-4">
+                          {/* Connected Endpoints */}
+                          {agentEndpoints.length > 0 && (
+                            <div>
+                              <span className="text-xs font-sans text-stone-400 font-medium block mb-2">Connected Endpoints</span>
+                              <div className="space-y-2">
+                                {agentEndpoints.map((ep) => (
+                                  <div key={ep.id} className="flex items-center justify-between p-3 bg-white border border-stone-100 rounded-xl">
+                                    <div className="flex items-center gap-2.5">
+                                      <Globe className="w-4 h-4 text-emerald-500" />
+                                      <div>
+                                        <span className="font-sans text-xs font-bold">{ep.name}</span>
+                                        <span className="text-xs text-stone-400 ml-2">{ep.latency}ms</span>
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                      <span className="font-sans text-xs text-[#8C2C16] font-bold">{ep.price.toFixed(5)} SUI/s</span>
+                                      {agent.activeStreamId && (
+                                        <span className="text-[10px] text-stone-400">Stream ID: {agent.activeStreamId.substring(0,8)}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Available Endpoints */}
+                          <div>
+                            <span className="text-xs font-sans text-stone-400 font-medium block mb-2">Available Endpoints</span>
+                            <div className="space-y-2">
+                              {endpoints.filter(ep => !agent.selectedEndpoints.includes(ep.id)).map((ep) => (
+                                <div key={ep.id} className="flex items-center justify-between p-3 bg-white border border-stone-100 rounded-xl">
+                                  <div className="flex items-center gap-2.5">
+                                    <Globe className="w-4 h-4 text-stone-400" />
+                                    <div>
+                                      <span className="font-sans text-xs font-bold">{ep.name}</span>
+                                      <span className="text-xs text-stone-400 ml-2">{ep.latency}ms</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-sans text-xs text-[#8C2C16] font-bold">{ep.price.toFixed(5)} SUI/s</span>
+                                    <button 
+                                      onClick={async () => {
+                                        try {
+                                          // Initialize SDK (using a dummy key since we don't have the user's raw private key in browser)
+                                          const sdk = new SuiDataGateSDK({
+                                            privateKeyHex: '0000000000000000000000000000000000000000000000000000000000000000',
+                                            rpcUrl: 'https://fullnode.testnet.sui.io:443',
+                                            agentId: agent.id
+                                          });
+
+                                          // Trigger request which automatically catches 402 and creates a stream
+                                          // Note: this will likely fail due to the dummy key having no gas,
+                                          // so we fallback to simulating the backend state updates below for the demo.
+                                          await sdk.makeRequest(`http://localhost:3001${ep.endpointUrl}`);
+                                        } catch (e) {
+                                          console.warn("SDK Request failed (likely due to dummy key). Proceeding with simulated stream creation.", e);
+                                        }
+                                        
+                                        // 1. Simulate SDK creating a stream
+                                        const streamId = `stream-${Date.now()}`;
+                                        const amountMist = agent.maxBudgetSui * 1_000_000_000;
+                                        
+                                        // 2. Patch agent with new stream
+                                        await fetch(`http://localhost:3001/api/agents/${agent.id}/stream`, {
+                                          method: "PATCH",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ streamId, amountMist })
+                                        });
+
+                                        // Update local state
+                                        onUpdateAgent(agent.id, { 
+                                          selectedEndpoints: [...agent.selectedEndpoints, ep.id],
+                                          activeStreamId: streamId
+                                        });
+                                      }}
+                                      className="py-1 px-3 bg-[#1C1A17] hover:bg-[#2E2E38] text-white font-sans text-[10px] font-bold rounded-lg shadow-sm transition-all"
+                                    >
+                                      Connect & Scrape
+                                    </button>
                                   </div>
                                 </div>
-                                <span className="font-sans text-xs text-[#8C2C16] font-bold">{ep.price.toFixed(5)} SUI/s</span>
-                              </div>
-                            ))}
-                            {agentEndpoints.length === 0 && (
-                              <div className="p-3 bg-white border border-stone-100 rounded-xl text-center">
-                                <span className="text-xs text-stone-400 font-sans">No endpoints connected</span>
-                              </div>
-                            )}
+                              ))}
+                              {endpoints.filter(ep => !agent.selectedEndpoints.includes(ep.id)).length === 0 && (
+                                <div className="p-3 bg-white border border-stone-100 rounded-xl text-center">
+                                  <span className="text-xs text-stone-400 font-sans">No available endpoints</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -368,6 +476,19 @@ export default function AgentDashboardPage({
                           )}
                         </div>
 
+                        {/* Stream Balance Polling (if active) */}
+                        {agent.activeStreamId && (
+                           <StreamBalancePoller 
+                             streamId={agent.activeStreamId}
+                             onBalanceUpdate={(balanceSui) => {
+                               const spent = agent.maxBudgetSui - balanceSui;
+                               if (spent !== agent.currentSpendSui) {
+                                 onUpdateAgent(agent.id, { currentSpendSui: spent });
+                               }
+                             }}
+                           />
+                        )}
+
                         {/* Agent Config Code Block */}
                         <div className="bg-[#1C1A17] text-[#8AF2D0] p-4 rounded-xl font-mono text-[10px] space-y-0.5 overflow-x-auto whitespace-pre">
                           <p className="text-white/40">// Agent Config</p>
@@ -379,6 +500,7 @@ export default function AgentDashboardPage({
                           <p>spent: {agent.currentSpendSui.toFixed(6)} SUI</p>
                           <p>interval: {agent.scrapeInterval}</p>
                           <p>status: <span className={agent.status === "active" ? "text-emerald-400" : agent.status === "paused" ? "text-amber-400" : "text-red-400"}>{agent.status.toUpperCase()}</span></p>
+                          <p>activeStreamId: {agent.activeStreamId || "null"}</p>
                           <p>created: {agent.createdAt}</p>
                         </div>
 

@@ -108,6 +108,28 @@ export default function ProviderPage({
 
   const accumulatedRevenue = consumers.reduce((acc, curr) => acc + curr.accumulatedSui, 0) + (selectedEndpoint.totalRequests * (selectedEndpoint.price / 1000));
 
+  const [realEarningsSui, setRealEarningsSui] = useState<number>(0);
+
+  React.useEffect(() => {
+    if (!selectedId) return;
+
+    const fetchEarnings = async () => {
+      try {
+        const res = await fetch(`http://localhost:3001/api/providers/${selectedId}/earnings`);
+        if (res.ok) {
+          const data = await res.json();
+          setRealEarningsSui(data.totalEarnedMist / 1_000_000_000);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    fetchEarnings();
+    const interval = setInterval(fetchEarnings, 10000);
+    return () => clearInterval(interval);
+  }, [selectedId]);
+
   return (
     <div className="pb-16">
       
@@ -150,7 +172,7 @@ export default function ProviderPage({
         <div className="p-4 border border-stone-200 bg-white">
           <span className="text-xs font-sans text-stone-400 block">Total Revenue</span>
           <span className="font-sans text-2xl font-bold text-emerald-800 mt-1 block">
-            {(accumulatedRevenue + 740).toFixed(2)} SUI
+            Total Earned: {realEarningsSui > 0 ? realEarningsSui.toFixed(4) : (accumulatedRevenue + 740).toFixed(2)} SUI
           </span>
           <span className="text-xs font-sans text-emerald-700 flex items-center gap-1 mt-1 font-medium">
             <TrendingUp className="w-3.5 h-3.5" />

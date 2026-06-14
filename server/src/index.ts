@@ -15,6 +15,76 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+interface Agent {
+  id: string;
+  name: string;
+  description: string;
+  purpose: 'research' | 'trading' | 'custom';
+  budgetMist: number;
+  spentMist: number;
+  activeStreamId?: string;
+  createdAt: string;
+}
+const agentRegistry: Map<string, Agent> = new Map();
+
+// ============================================================
+//  AGENTS API
+// ============================================================
+
+app.post('/api/agents', (req, res) => {
+  const { name, description, purpose, budgetMist } = req.body;
+  if (!name || !purpose || budgetMist === undefined) {
+    return res.status(400).json({ error: 'Missing required fields: name, purpose, budgetMist' });
+  }
+  const newAgent: Agent = {
+    id: `agent-${Date.now()}`,
+    name,
+    description: description || '',
+    purpose,
+    budgetMist: Number(budgetMist),
+    spentMist: 0,
+    createdAt: new Date().toISOString()
+  };
+  agentRegistry.set(newAgent.id, newAgent);
+  res.status(201).json(newAgent);
+});
+
+app.get('/api/agents', (req, res) => {
+  res.json(Array.from(agentRegistry.values()));
+});
+
+app.get('/api/agents/:id', async (req, res) => {
+  const agent = agentRegistry.get(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+  
+  const response: any = { ...agent };
+  
+  if (agent.activeStreamId) {
+    try {
+      const stream = await readStreamObjectState(agent.activeStreamId);
+      response.remainingBalanceMist = Number(stream.balanceMist);
+    } catch (e) {
+      console.error('Failed to read stream object state for agent', agent.id, e);
+    }
+  }
+  
+  res.json(response);
+});
+
+app.patch('/api/agents/:id/stream', (req, res) => {
+  const agent = agentRegistry.get(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+  
+  const { streamId, amountMist } = req.body;
+  if (!streamId || amountMist === undefined) {
+    return res.status(400).json({ error: 'Missing required fields: streamId, amountMist' });
+  }
+  
+  agent.activeStreamId = streamId;
+  agent.spentMist += Number(amountMist);
+  res.json(agent);
+});
+
 // ============================================================
 //  PUBLIC API — Marketplace Registry (no payment required)
 // ============================================================
