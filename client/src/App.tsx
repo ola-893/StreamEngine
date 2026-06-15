@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Routes, Route, useNavigate, useLocation, Navigate } from "react-router-dom";
-import { Endpoint, Agent } from "./types";
+import { Endpoint, Agent, HealthStatus, API_BASE, mapProviderToEndpoint, ProviderListing } from "./types";
 import { useCurrentAccount } from "@mysten/dapp-kit-react";
 import { ConnectButton } from "@mysten/dapp-kit-react/ui";
 import { dAppKit } from "./dapp-kit-config";
@@ -20,13 +20,12 @@ import LandingPage from "./components/LandingPage";
 import OnboardingPage from "./components/OnboardingPage";
 import AgentCreatePage from "./components/AgentCreatePage";
 import AgentDashboardPage from "./components/AgentDashboardPage";
-import DirectoryPage from "./components/DirectoryPage";
 import RegisterPage from "./components/RegisterPage";
 import ProviderPage from "./components/ProviderPage";
-import NodeDetailPage from "./components/NodeDetailPage";
 import DeveloperPage from "./components/DeveloperPage";
+import PremiumFeedsPage from "./components/PremiumFeedsPage";
 
-const API_BASE = "http://localhost:3001";
+
 
 export default function App() {
   const navigate = useNavigate();
@@ -50,7 +49,6 @@ export default function App() {
   }, [isWalletConnected, location.pathname, navigate]);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [selectedEndpoint, setSelectedEndpoint] = useState<Endpoint | undefined>(undefined);
 
 
   // Fetch real SUI balance from chain whenever wallet connects
@@ -85,6 +83,21 @@ export default function App() {
       });
   }, [isWalletConnected, walletAddress]);
 
+  // Backend health status (polls every 30s)
+  const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null);
+
+  useEffect(() => {
+    const checkHealth = () => {
+      fetch(`${API_BASE}/api/health`)
+        .then((res) => res.json())
+        .then((data: HealthStatus) => setHealthStatus(data))
+        .catch(() => setHealthStatus(null));
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Backend-backed provider state
   const [providers, setProviders] = useState<Endpoint[]>([]);
   const [providersLoading, setProvidersLoading] = useState(false);
@@ -94,31 +107,9 @@ export default function App() {
     setProvidersLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/providers`);
-      const data = await res.json();
+      const data: { providers: ProviderListing[] } = await res.json();
       if (data.providers) {
-        // Map backend ProviderListing to frontend Endpoint
-        const mapped: Endpoint[] = data.providers.map((p: any) => ({
-          id: p.id,
-          name: p.name.toUpperCase().replace(/\s+/g, "_"),
-          type: (p.category === "Social Media" ? "api" : p.category === "Finance" ? "api" : "stream") as Endpoint["type"],
-          status: "active" as const,
-          price: p.ratePerSecond / 1_000_000_000,
-          unit: "sec of access",
-          dataProvider: p.name,
-          latency: 12,
-          throughput: "42.4 MB/s",
-          rating: 4.95,
-          uptime: 99.99,
-          description: p.description,
-          endpointUrl: p.websiteUrl,
-          inputs: ["request_body"],
-          outputs: ["stream_chunk"],
-          apiKeyRequired: false,
-          totalRequests: 0,
-          activeConsumers: 0,
-          gasSui: 0.002,
-        }));
-        setProviders(mapped);
+        setProviders(data.providers.map(mapProviderToEndpoint));
       }
     } catch {
       // Fallback to hardcoded demo data if server is offline
@@ -145,17 +136,6 @@ export default function App() {
     setProviders((prev) => [newEp, ...prev]);
   };
 
-  const handleUpdateEndpointPrice = (id: string, price: number) => {
-    setProviders((prev) =>
-      prev.map((ep) => (ep.id === id ? { ...ep, price } : ep))
-    );
-  };
-
-  const handleUpdateEndpointStatus = (id: string, status: Endpoint["status"]) => {
-    setProviders((prev) =>
-      prev.map((ep) => (ep.id === id ? { ...ep, status } : ep))
-    );
-  };
 
   // Agent state management
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -172,15 +152,6 @@ export default function App() {
     setAgents((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const handleSelectEndpointFromDirectory = (ep: Endpoint) => {
-    setSelectedEndpoint(ep);
-    if (ep.type === "compute") {
-      navigate(`/directory/${ep.id}`);
-    } else {
-      navigate(`/provider`);
-    }
-  };
-
   // Check if we're on the landing or onboarding page (no sidebar)
   const isFullscreenPage = location.pathname === "/" || location.pathname === "/onboarding" || location.pathname === "/agent/create";
 
@@ -189,11 +160,11 @@ export default function App() {
 
   // Sidebar navigation items
   const navigationTabs = [
-    { path: "/directory", label: "Browse Data", num: "01", category: "Core Markets" },
+    { path: "/premium", label: "Premium Feeds", num: "01", category: "Core Markets" },
     { path: "/register", label: "Register Endpoint", num: "02", category: "Core Markets" },
     { path: "/provider", label: "Provider Dashboard", num: "03", category: "Core Markets" },
-    { path: "/agent/dashboard", label: "My Agents", num: "04", category: "Agent Space" },
-    { path: "/developer", label: "Developer Tools", num: "05", category: "Resources" }
+    { path: "/agent/dashboard", label: "My Agents", num: "05", category: "Agent Space" },
+    { path: "/developer", label: "Developer Tools", num: "06", category: "Resources" }
   ];
 
   // Full-bleed pages (landing, onboarding) render without sidebar
@@ -351,10 +322,13 @@ export default function App() {
         {/* Sidebar Footer */}
         <div className="mt-8 pt-4 border-t border-stone-200">
           <div className="p-3 bg-white/65 border border-stone-200 text-xs">
-            <span className="text-xs font-sans text-stone-400 block">Network Status</span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-sans text-stone-400">Network Status</span>
+              <span className={`w-2 h-2 rounded-full ${healthStatus?.status === "ok" ? "bg-emerald-500" : "bg-stone-300"}`} />
+            </div>
             <div className="flex justify-between items-baseline font-mono mt-1">
               <span className="text-xs text-stone-500">Registered Endpoints</span>
-              <span className="font-sans text-sm font-bold text-[#8C2C16]">{providers.length}</span>
+              <span className="font-sans text-sm font-bold text-[#8C2C16]">{healthStatus?.providers ?? providers.length}</span>
             </div>
           </div>
           <div className="text-[10px] text-stone-400 font-sans mt-3 text-center">
@@ -368,24 +342,17 @@ export default function App() {
         <div className="absolute top-0 right-1/4 w-[1px] h-full bg-stone-200/45 pointer-events-none hidden lg:block" />
         <div className="max-w-6xl mx-auto relative z-10">
           <Routes>
-            <Route path="/directory" element={
-              <DirectoryPage
-                endpoints={providers}
-                onSelectEndpoint={handleSelectEndpointFromDirectory}
-              />
-            } />
-            <Route path="/directory/:endpointId" element={
-              <NodeDetailPage selectedEndpoint={selectedEndpoint} />
-            } />
+            <Route path="/premium" element={<PremiumFeedsPage />} />
             <Route path="/register" element={
-              <RegisterPage onAddEndpoint={handleAddEndpoint} />
+              <RegisterPage
+                onAddEndpoint={handleAddEndpoint}
+                walletAddress={walletAddress}
+                isWalletConnected={isWalletConnected}
+                suiBalance={suiBalance}
+              />
             } />
             <Route path="/provider" element={
-              <ProviderPage
-                endpoints={providers}
-                onUpdateEndpointPrice={handleUpdateEndpointPrice}
-                onUpdateEndpointStatus={handleUpdateEndpointStatus}
-              />
+              <ProviderPage endpoints={providers} isWalletConnected={isWalletConnected} />
             } />
             <Route path="/agent/dashboard" element={
               <AgentDashboardPage
@@ -396,7 +363,7 @@ export default function App() {
               />
             } />
             <Route path="/developer" element={<DeveloperPage />} />
-            <Route path="*" element={<Navigate to="/directory" replace />} />
+            <Route path="*" element={<Navigate to="/premium" replace />} />
           </Routes>
         </div>
       </main>

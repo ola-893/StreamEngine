@@ -1,14 +1,12 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Endpoint, EndpointType } from "../types";
+import { Endpoint, EndpointType, API_BASE } from "../types";
 import { 
   ArrowLeft, 
   ChevronRight, 
   Database, 
   Cpu, 
   FileCode, 
-  Lock, 
-  Layers, 
   AlertTriangle,
   Wallet,
   Zap,
@@ -17,9 +15,12 @@ import {
 
 interface RegisterPageProps {
   onAddEndpoint: (endpoint: Endpoint) => void;
+  walletAddress: string | null;
+  isWalletConnected: boolean;
+  suiBalance: number;
 }
 
-export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
+export default function RegisterPage({ onAddEndpoint, walletAddress, isWalletConnected, suiBalance }: RegisterPageProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   
@@ -49,7 +50,7 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
 
   const handleNextStep1 = () => {
     if (!name.trim()) {
-      setError("Endpoint callsing or identifier is required");
+      setError("Endpoint name or identifier is required");
       return;
     }
     if (!provider.trim()) {
@@ -57,11 +58,11 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
       return;
     }
     if (!description.trim()) {
-      setError("A concise specifications text summary is required");
+      setError("A concise description is required");
       return;
     }
     if (!endpointUrl.trim()) {
-      setError("Active routing endpoint URL is required");
+      setError("Endpoint URL is required");
       return;
     }
     setError("");
@@ -79,15 +80,19 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
   };
 
   const handleDeploy = async () => {
+    if (!isWalletConnected || !walletAddress) {
+      setError("Connect your wallet before deploying");
+      return;
+    }
     setIsDeploying(true);
     
     try {
       // POST to backend registry
-      const res = await fetch("http://localhost:3001/api/providers", {
+      const res = await fetch(`${API_BASE}/api/providers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          providerAddress: "0x0000000000000000000000000000000000000000000000000000000000001234",
+          providerAddress: walletAddress,
           name: provider,
           websiteUrl: endpointUrl,
           ratePerSecond: parseFloat(price),
@@ -106,18 +111,18 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
         price: parseFloat(price),
         unit,
         dataProvider: provider,
-        latency: Math.floor(Math.random() * 80) + 10,
-        throughput: (Math.random() * 200 + 10).toFixed(1) + " MB/s",
-        rating: 4.8 + Math.random() * 0.2,
-        uptime: parseFloat((99.5 + Math.random() * 0.49).toFixed(2)),
+        latency: 0,
+        throughput: "0 MB/s",
+        rating: 0,
+        uptime: 100,
         description,
         endpointUrl,
-        inputs: ["request_body", "auth_token"],
-        outputs: ["stream_chunk", "gas_receipt"],
+        inputs: [],
+        outputs: [],
         apiKeyRequired,
         totalRequests: 0,
         activeConsumers: 0,
-        gasSui: 0.02
+        gasSui: 0
       };
 
       onAddEndpoint(newEp);
@@ -131,18 +136,18 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
         price: parseFloat(price),
         unit,
         dataProvider: provider,
-        latency: Math.floor(Math.random() * 80) + 10,
-        throughput: (Math.random() * 200 + 10).toFixed(1) + " MB/s",
-        rating: 4.8 + Math.random() * 0.2,
-        uptime: parseFloat((99.5 + Math.random() * 0.49).toFixed(2)),
+        latency: 0,
+        throughput: "0 MB/s",
+        rating: 0,
+        uptime: 100,
         description,
         endpointUrl,
-        inputs: ["request_body", "auth_token"],
-        outputs: ["stream_chunk", "gas_receipt"],
+        inputs: [],
+        outputs: [],
         apiKeyRequired,
         totalRequests: 0,
         activeConsumers: 0,
-        gasSui: 0.02
+        gasSui: 0
       };
       onAddEndpoint(newEp);
     } finally {
@@ -151,6 +156,10 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
     }
   };
 
+  const truncatedAddress = walletAddress
+    ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
+    : "Not connected";
+
   return (
     <div className="pb-16 max-w-4xl">
       
@@ -158,7 +167,7 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
       <div className="flex items-center gap-2 text-xs font-sans text-stone-500 mb-6">
         <span onClick={() => navigate("/")} className="hover:text-black cursor-pointer transition-colors font-semibold">Flowgate</span>
         <span>/</span>
-        <span onClick={() => navigate("/directory")} className="hover:text-black cursor-pointer transition-colors">Browse Data</span>
+        <span onClick={() => navigate("/premium")} className="hover:text-black cursor-pointer transition-colors">Premium Feeds</span>
         <span>/</span>
         <span className="text-stone-400">Register</span>
       </div>
@@ -168,7 +177,7 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
         <button 
           onClick={() => {
             if (step > 1 && !deploymentSuccess) setStep(step - 1);
-            else navigate("/directory");
+            else navigate("/premium");
           }} 
           className="p-2.5 border border-stone-300 bg-white hover:bg-stone-50 hover:border-[#1C1A17] transition-all rounded-full flex items-center justify-center shadow-sm"
         >
@@ -186,7 +195,7 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
 
       {/* Stepper Wizard Bar */}
       <div className="grid grid-cols-3 gap-3 mb-10">
-        {[              { id: 1, label: "Details" },
+        {[{ id: 1, label: "Details" },
           { id: 2, label: "Pricing" },
           { id: 3, label: "Deploy" }
         ].map((s) => (
@@ -205,8 +214,20 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-300 rounded-xl gap-3 flex items-start text-sm font-sans text-red-900">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-700" />
-          <div className="flex flex-col">              <span className="font-bold">Validation Error</span>
+          <div className="flex flex-col">
+            <span className="font-bold">Validation Error</span>
             <p className="text-[11px] mt-0.5 leading-normal text-red-700">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Wallet gate */}
+      {!isWalletConnected && step === 3 && (
+        <div className="mb-6 p-5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+          <Wallet className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-sans text-amber-900 font-bold">Wallet not connected</span>
+            <p className="text-xs font-sans text-amber-800">Connect your Sui wallet in the sidebar to deploy your endpoint.</p>
           </div>
         </div>
       )}
@@ -363,34 +384,25 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
                   />
                   <label htmlFor="api-key" className="text-sm font-sans text-stone-600 leading-relaxed selection:bg-transparent">
                     <span className="font-bold text-[#1C1A17] block text-sm">Require API key</span>
-                    Requires consumers to initialize active private signature codes before downloading continuous streams. Prevents Sybil exhaustion.
+                    Requires consumers to provide an API key before accessing your endpoint.
                   </label>
-                </div>
-
-                <div className="border-t border-stone-200 pt-3 flex flex-col gap-1.5 text-sm font-sans text-stone-500">
-                  <div className="flex justify-between">
-                    <span>Registry fee:</span>
-                    <span className="text-emerald-800 font-bold">0.002 SUI / request</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Gas estimate:</span>
-                    <span className="text-stone-700 font-bold">0.02 SUI</span>
-                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-between pt-6 border-t border-stone-100 mt-4">                <button 
-                  onClick={() => setStep(1)}
-                  className="px-5 py-2.5 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-sm font-sans font-bold transition-all cursor-pointer"
+            <div className="flex justify-between pt-6 border-t border-stone-100 mt-4">
+              <button 
+                onClick={() => setStep(1)}
+                className="px-5 py-2.5 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-sm font-sans font-bold transition-all cursor-pointer"
               >
                 Back
-              </button>                <button 
-                  onClick={handleNextStep2}
-                  className="px-5 py-3 bg-[#1C1A17] hover:bg-[#2E2E38] text-[#FAF9F5] text-sm font-sans font-bold rounded-full transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-95 cursor-pointer"
-                >
-                  Next: Deploy
-                  <ChevronRight className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={handleNextStep2}
+                className="px-5 py-3 bg-[#1C1A17] hover:bg-[#2E2E38] text-[#FAF9F5] text-sm font-sans font-bold rounded-full transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-95 cursor-pointer"
+              >
+                Next: Deploy
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -406,60 +418,46 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
 
             <div className="flex flex-col gap-5">
               
-              {/* Simulated Wallet Widget */}
+              {/* Wallet info from connected wallet */}
               <div className="p-6 bg-[#FAF9F5] border border-stone-250">
                 <div className="flex items-center justify-between border-b border-stone-200 pb-3 mb-4">
                   <div className="flex items-center gap-3">
                     <Wallet className="w-5 h-5 text-[#8C2C16]" />
                     <div>
                       <span className="text-xs font-sans text-stone-500 block font-medium">Wallet Address</span>
-                      <span className="text-sm font-sans text-[#1C1A17] font-bold select-all">sui:addr_8ab9c02ff...99a0c1</span>
+                      <span className="text-sm font-sans text-[#1C1A17] font-bold select-all">{truncatedAddress}</span>
                     </div>
                   </div>
-                  <span className="text-sm font-sans text-stone-500 font-medium">Network:</span>
                   <span className="text-xs font-sans px-2 py-0.5 border border-[#8C2C16]/20 bg-[#8C2C16]/5 text-[#8C2C16] font-bold rounded-full">Mainnet</span>
                 </div>
 
-                <div className="flex items-center justify-between text-sm font-sans mb-4">
+                <div className="flex items-center justify-between text-sm font-sans">
                   <span className="text-stone-500 font-medium">Balance:</span>
-                  <span className="text-base text-stone-800 font-bold">1,482.49 SUI</span>
-                </div>
-
-                <div className="p-4 border-l-2 border-[#8C2C16] bg-stone-100/50 flex flex-col gap-1.5 text-sm font-sans text-stone-600">
-                  <div className="flex justify-between">
-                    <span>Escrow lock fee:</span>
-                    <span className="text-stone-800 font-bold">5.00 SUI</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Gas fee:</span>
-                    <span className="text-stone-800">0.10 SUI</span>
-                  </div>
-                  <div className="border-t border-stone-200 my-1 pt-2 flex justify-between text-sm font-bold text-[#1C1A17]">
-                    <span>Total cost:</span>
-                    <span className="text-stone-900 font-sans text-base font-black">5.10 SUI</span>
-                  </div>
+                  <span className="text-base text-stone-800 font-bold">{suiBalance.toFixed(2)} SUI</span>
                 </div>
               </div>
 
               <div className="p-4 bg-amber-50 border border-amber-200 text-sm font-sans text-amber-900 flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 shrink-0 text-amber-700 mt-0.5" />
                 <p className="leading-relaxed text-xs">
-                  Deploying registers your endpoint in the FlowGate directory. You can reclaim the lock deposit at any time.
+                  Deploying registers your endpoint in the FlowGate directory. Gas fees will be charged to your connected wallet.
                 </p>
               </div>
             </div>
 
-            <div className="flex justify-between pt-6 border-t border-stone-100 mt-4">                <button 
-                  onClick={() => setStep(2)}
-                  className="px-5 py-2.5 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-sm font-sans font-bold transition-all cursor-pointer"
-                  disabled={isDeploying}
+            <div className="flex justify-between pt-6 border-t border-stone-100 mt-4">
+              <button 
+                onClick={() => setStep(2)}
+                className="px-5 py-2.5 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-sm font-sans font-bold transition-all cursor-pointer"
+                disabled={isDeploying}
               >
                 Back
-              </button>                <button 
-                  onClick={handleDeploy}
-                  disabled={isDeploying}
-                  className="px-6 py-3.5 bg-[#8C2C16] hover:bg-[#A63A23] text-sm font-sans font-bold text-white rounded-full transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-95 cursor-pointer"
-                >
+              </button>
+              <button 
+                onClick={handleDeploy}
+                disabled={isDeploying || !isWalletConnected}
+                className="px-6 py-3.5 bg-[#8C2C16] hover:bg-[#A63A23] disabled:opacity-40 disabled:cursor-not-allowed text-sm font-sans font-bold text-white rounded-full transition-all flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-95 cursor-pointer"
+              >
                 {isDeploying ? (
                   <>
                     <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
@@ -498,17 +496,17 @@ export default function RegisterPage({ onAddEndpoint }: RegisterPageProps) {
                 <span className="text-stone-800 font-bold">{parseFloat(price).toFixed(4)} SUI per {unit}</span>
               </div>
               <div className="flex justify-between text-stone-500">
-                <span>Escrow hash:</span>
-                <span className="text-stone-700 font-bold">0x49a1d9b...e2920f</span>
+                <span>Provider:</span>
+                <span className="text-stone-700 font-bold">{truncatedAddress}</span>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3.5 w-full justify-center max-w-md mt-4">
               <button 
-                onClick={() => navigate("/directory")}
+                onClick={() => navigate("/premium")}
                 className="w-full py-3.5 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-sm font-sans font-bold transition-all cursor-pointer"
               >
-                Back to Directory
+                Back to Premium Feeds
               </button>
               <button 
                 onClick={() => navigate("/provider")}

@@ -56,10 +56,10 @@ export default function LandingPage({
 
         {/* Central Pills menu */}
         <nav className="hidden md:flex items-center gap-1.5 bg-[#FAF9F6]/80 backdrop-blur-md border border-[#1C1A17]/10 p-1 rounded-full shadow-sm">
-          <button onClick={() => scrollToSection("hero-section", "home")} className={`px-4 py-1.5 rounded-full text-[11px] font-medium transition-all ${activeTabSection === "home" ? "bg-[#1C1A17] text-[#FAF9F5]" : "text-[#1C1A17]/65 hover:text-[#1C1A17] hover:bg-[#1C1A17]/5"}`}>Home page</button>
-          <button onClick={() => scrollToSection("benefits-grid", "benefits")} className={`px-4 py-1.5 rounded-full text-[11px] font-medium transition-all ${activeTabSection === "benefits" ? "bg-[#1C1A17] text-[#FAF9F5]" : "text-[#1C1A17]/65 hover:text-[#1C1A17] hover:bg-[#1C1A17]/5"}`}>Catalog directory</button>
-          <button onClick={() => scrollToSection("consensus-flow", "flow")} className={`px-4 py-1.5 rounded-full text-[11px] font-medium transition-all ${activeTabSection === "flow" ? "bg-[#1C1A17] text-[#FAF9F5]" : "text-[#1C1A17]/65 hover:text-[#1C1A17] hover:bg-[#1C1A17]/5"}`}>Docs review</button>
-          <button onClick={() => scrollToSection("protocol-stats", "stats")} className={`px-4 py-1.5 rounded-full text-[11px] font-medium transition-all ${activeTabSection === "stats" ? "bg-[#1C1A17] text-[#FAF9F5]" : "text-[#1C1A17]/65 hover:text-[#1C1A17] hover:bg-[#1C1A17]/5"}`}>Escrows</button>
+      
+
+          <button onClick={() => scrollToSection("protocol-stats", "stats")} className={`px-4 py-1.5 rounded-full text-[11px] font-medium transition-all ${activeTabSection === "stats" ? "bg-[#1C1A17] text-[#FAF9F5]" : "text-[#1C1A17]/65 hover:text-[#1C1A17] hover:bg-[#1C1A17]/5"}`}>Features</button>
+          <button onClick={() => scrollToSection("consensus-flow", "flow")} className={`px-4 py-1.5 rounded-full text-[11px] font-medium transition-all ${activeTabSection === "flow" ? "bg-[#1C1A17] text-[#FAF9F5]" : "text-[#1C1A17]/65 hover:text-[#1C1A17] hover:bg-[#1C1A17]/5"}`}>How It Works</button>
         </nav>
 
         {/* Right Wallet / Entry buttons */}

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@mysten/dapp-kit": "^1.0.6",
     "@mysten/dapp-kit-react": "^2.0.3",
     "@mysten/sui": "^2.17.0",
     "@tailwindcss/vite": "^4.1.14",
