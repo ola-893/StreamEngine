@@ -39,19 +39,22 @@ export default function App() {
   const [suiBalance, setSuiBalance] = useState<number>(0);
   const [balanceLoading, setBalanceLoading] = useState(false);
 
-  // Auto-navigate to onboarding when wallet connects on landing page
+  // Check if user has completed onboarding before
+  const hasCompletedOnboarding = localStorage.getItem("flowgate_onboarded") === "true";
+
+  // Auto-navigate to onboarding when wallet connects on landing page (only for first-time users)
   const prevConnectedRef = React.useRef(isWalletConnected);
   useEffect(() => {
-    if (isWalletConnected && !prevConnectedRef.current && location.pathname === "/") {
+    if (isWalletConnected && !prevConnectedRef.current && location.pathname === "/" && !hasCompletedOnboarding) {
       navigate("/onboarding");
     }
     prevConnectedRef.current = isWalletConnected;
-  }, [isWalletConnected, location.pathname, navigate]);
+  }, [isWalletConnected, location.pathname, navigate, hasCompletedOnboarding]);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
 
-  // Fetch real SUI balance from chain whenever wallet connects
+  // Fetch real SUI balance from chain — tries mainnet, falls back to testnet
   useEffect(() => {
     if (!isWalletConnected || !walletAddress) {
       setSuiBalance(0);
@@ -59,28 +62,41 @@ export default function App() {
       return;
     }
     setBalanceLoading(true);
-    fetch("https://fullnode.mainnet.sui.io:443", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "suix_getBalance",
-        params: [walletAddress, "0x2::sui::SUI"],
-      }),
-    })
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.result?.totalBalance) {
-          setSuiBalance(Number(json.result.totalBalance) / 1_000_000_000);
+
+    const RPC_ENDPOINTS = [
+      "https://fullnode.mainnet.sui.io:443",
+      "https://fullnode.testnet.sui.io:443",
+    ];
+
+    async function fetchBalance() {
+      for (const rpcUrl of RPC_ENDPOINTS) {
+        try {
+          const res = await fetch(rpcUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              method: "suix_getBalance",
+              params: [walletAddress, "0x2::sui::SUI"],
+            }),
+          });
+          const json = await res.json();
+          const balance = Number(json.result?.totalBalance || "0") / 1_000_000_000;
+          if (balance > 0) {
+            setSuiBalance(balance);
+            setBalanceLoading(false);
+            return;
+          }
+        } catch {
+          // Try next endpoint
         }
-      })
-      .catch(() => {
-        setSuiBalance(0);
-      })
-      .finally(() => {
-        setBalanceLoading(false);
-      });
+      }
+      setSuiBalance(0);
+      setBalanceLoading(false);
+    }
+
+    fetchBalance();
   }, [isWalletConnected, walletAddress]);
 
   // Backend health status (polls every 30s)
@@ -145,20 +161,18 @@ export default function App() {
       const res = await fetch(`${API_BASE}/api/agents`);
       if (res.ok) {
         const data = await res.json();
-        // map backend agent to frontend Agent
         const mapped = data.map((a: any) => ({
           id: a.id,
           name: a.name,
           description: a.description || "",
           purpose: a.purpose,
-          selectedEndpoints: [],
           maxBudgetSui: a.budgetMist / 1_000_000_000,
           currentSpendSui: a.spentMist / 1_000_000_000,
-          autoRefill: false,
-          scrapeInterval: "30s",
-          status: "active",
           createdAt: a.createdAt,
-          totalRequests: 0,
+          activeStreamId: a.activeStreamId,
+          remainingBalanceMist: a.remainingBalanceMist,
+          walletAddress: a.walletAddress,
+          connectedEndpoints: a.connectedEndpoints,
         }));
         setAgents(mapped);
       }
@@ -177,10 +191,6 @@ export default function App() {
 
   const handleUpdateAgent = (id: string, updates: Partial<Agent>) => {
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
-  };
-
-  const handleDeleteAgent = (id: string) => {
-    setAgents((prev) => prev.filter((a) => a.id !== id));
   };
 
   // Check if we're on the landing or onboarding page (no sidebar)
@@ -216,16 +226,14 @@ export default function App() {
               walletAddress={walletAddress}
               suiBalance={suiBalance}
             />
-          } />
-          <Route path="/agent/create" element={
-            <AgentCreatePage
-              isWalletConnected={isWalletConnected}
-              walletAddress={walletAddress}
-              suiBalance={suiBalance}
-              endpoints={providers}
-              onDeploy={handleAddAgent}
-            />
-          } />
+          } />            <Route path="/agent/create" element={
+              <AgentCreatePage
+                isWalletConnected={isWalletConnected}
+                walletAddress={walletAddress}
+                suiBalance={suiBalance}
+                onDeploy={handleAddAgent}
+              />
+            } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -388,9 +396,7 @@ export default function App() {
             <Route path="/agent/dashboard" element={
               <AgentDashboardPage
                 agents={agents}
-                endpoints={providers}
                 onUpdateAgent={handleUpdateAgent}
-                onDeleteAgent={handleDeleteAgent}
               />
             } />
             <Route path="/developer" element={<DeveloperPage />} />

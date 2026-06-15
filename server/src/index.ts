@@ -19,7 +19,7 @@ interface Agent {
   id: string;
   name: string;
   description: string;
-  purpose: 'research' | 'trading' | 'custom';
+  purpose: 'research' | 'trading' | 'monitoring' | 'content' | 'custom';
   budgetMist: number;
   spentMist: number;
   activeStreamId?: string;

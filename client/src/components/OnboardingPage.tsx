@@ -258,14 +258,17 @@ export default function OnboardingPage({
                   >
                     ← Back
                   </button>
-                  <button
-                    onClick={() => setStep(4)}
-                    disabled={!selectedRole}
-                    className="py-3 px-8 bg-[#1C1A17] hover:bg-[#2E2E38] disabled:opacity-40 text-white font-mono text-xs font-bold tracking-wider uppercase rounded-full flex items-center gap-2 shadow-lg transition-all"
-                  >
-                    Continue
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
+                <button
+                  onClick={() => {
+                    localStorage.setItem("flowgate_onboarded", "true");
+                    setStep(4);
+                  }}
+                  disabled={!selectedRole}
+                  className="py-3 px-8 bg-[#1C1A17] hover:bg-[#2E2E38] disabled:opacity-40 text-white font-mono text-xs font-bold tracking-wider uppercase rounded-full flex items-center gap-2 shadow-lg transition-all"
+                >
+                  Continue
+                  <ArrowRight className="w-4 h-4" />
+                </button>
                 </div>
               </motion.div>
             )}
@@ -306,10 +309,10 @@ export default function OnboardingPage({
                         <ArrowRight className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => navigate("/directory")}
+                        onClick={() => navigate("/premium")}
                         className="py-3.5 px-8 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-xs font-mono font-bold uppercase transition-all"
                       >
-                        Browse Directory
+                        Premium Feeds
                       </button>
                     </>
                   ) : (
@@ -322,10 +325,10 @@ export default function OnboardingPage({
                         <ArrowRight className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => navigate("/directory")}
+                        onClick={() => navigate("/premium")}
                         className="py-3.5 px-8 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-xs font-mono font-bold uppercase transition-all"
                       >
-                        Browse Directory
+                        Premium Feeds
                       </button>
                     </>
                   )}
