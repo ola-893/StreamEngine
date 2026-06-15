@@ -42,14 +42,17 @@ export default function App() {
   // Check if user has completed onboarding before
   const hasCompletedOnboarding = localStorage.getItem("flowgate_onboarded") === "true";
 
-  // Auto-navigate to onboarding when wallet connects on landing page (only for first-time users)
+  // Auto-navigate when wallet connects on landing page
+  // First-time users → onboarding, returning users → dashboard
   const prevConnectedRef = React.useRef(isWalletConnected);
   useEffect(() => {
-    if (isWalletConnected && !prevConnectedRef.current && location.pathname === "/" && !hasCompletedOnboarding) {
-      navigate("/onboarding");
+    if (isWalletConnected && !prevConnectedRef.current && location.pathname === "/") {
+      navigate(hasCompletedOnboarding ? "/premium" : "/onboarding");
     }
     prevConnectedRef.current = isWalletConnected;
   }, [isWalletConnected, location.pathname, navigate, hasCompletedOnboarding]);
+
+
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
@@ -64,8 +67,8 @@ export default function App() {
     setBalanceLoading(true);
 
     const RPC_ENDPOINTS = [
-      "https://fullnode.mainnet.sui.io:443",
       "https://fullnode.testnet.sui.io:443",
+      "https://fullnode.mainnet.sui.io:443",
     ];
 
     async function fetchBalance() {
@@ -192,6 +195,14 @@ export default function App() {
   const handleUpdateAgent = (id: string, updates: Partial<Agent>) => {
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
   };
+
+  // If a connected user with agents lands on /, redirect to dashboard
+  // (handles the sidebar Home button case where wallet is already connected)
+  useEffect(() => {
+    if (isWalletConnected && location.pathname === "/" && agents.length > 0) {
+      navigate("/premium", { replace: true });
+    }
+  }, [isWalletConnected, location.pathname, agents.length, navigate]);
 
   // Check if we're on the landing or onboarding page (no sidebar)
   const isFullscreenPage = location.pathname === "/" || location.pathname === "/onboarding" || location.pathname === "/agent/create";

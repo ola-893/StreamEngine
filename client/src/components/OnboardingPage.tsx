@@ -51,7 +51,10 @@ export default function OnboardingPage({
               <span className="font-mono text-xs tracking-widest font-black uppercase">FLOWGATE</span>
             </div>
             <button
-              onClick={() => navigate("/")}
+              onClick={() => {
+                localStorage.setItem("flowgate_onboarded", "true");
+                navigate("/");
+              }}
               className="px-3 py-1.5 text-[10px] font-mono border border-stone-300 bg-[#FAF9F5] hover:border-[#1C1A17] uppercase transition-all rounded-full"
             >
               Skip

@@ -6,8 +6,8 @@ import { BaseClient } from '@mysten/sui/client';
 const SuiClient = BaseClient as any;
 
 export const dAppKit = createDAppKit({
-  networks: ['mainnet', 'testnet'] as const,
-  defaultNetwork: 'mainnet',
+  networks: ['testnet', 'mainnet'] as const,
+  defaultNetwork: 'testnet',
   createClient: (network) =>
     new SuiClient({
       url:
