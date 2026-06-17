@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+streamengine.db
+streamengine.db-shm
+streamengine.db-wal
+data

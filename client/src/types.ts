@@ -1,6 +1,6 @@
 /** @license SPDX-License-Identifier: Apache-2.0 */
 
-const API_BASE = ((import.meta as any).env?.VITE_API_URL || "http://localhost:3001").replace(/\/+$/, "");
+const API_BASE = (import.meta.env.VITE_GATEWAY_URL || "http://localhost:3001").replace(/\/+$/, "");
 
 export { API_BASE };
 

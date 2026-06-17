@@ -40,3 +40,6 @@ coverage/
 # Misc
 *.tgz
 .cache/
+server/streamengine.db*
+
+data/
