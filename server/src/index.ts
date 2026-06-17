@@ -1,12 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { requireX402Payment } from './x402/middleware.ts';
-import {
-  getProviderById,
-  getProviderEarnings,
-  getProviders,
-  registerProvider,
-} from './registry/providers.ts';
+import { saveAgent, getAgent, getAllAgents, saveProvider, getProvider, getAllProviders, updateProviderEarnings } from './db.ts';
 import { readStreamObjectState, client as suiClient } from './x402/streams.ts';
 import crypto from 'crypto';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
@@ -72,7 +67,6 @@ interface Agent {
   activeStreams: AgentStream[];
   createdAt: string;
 }
-const agentRegistry: Map<string, Agent> = new Map();
 
 // ============================================================
 //  AGENTS API
@@ -100,18 +94,18 @@ app.post('/api/agents', (req, res) => {
     createdAt: new Date().toISOString()
   };
   
-  agentRegistry.set(newAgent.id, newAgent);
+  saveAgent(newAgent);
   
   const { encryptedPrivateKey: _, ...agentWithoutSecret } = newAgent;
   res.status(201).json(agentWithoutSecret);
 });
 
 app.get('/api/agents', (req, res) => {
-  res.json(Array.from(agentRegistry.values()));
+  res.json(getAllAgents());
 });
 
 app.get('/api/agents/:id', async (req, res) => {
-  const agent = agentRegistry.get(req.params.id);
+  const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
   
   const { encryptedPrivateKey: _, ...agentWithoutSecret } = agent;
@@ -119,7 +113,7 @@ app.get('/api/agents/:id', async (req, res) => {
 });
 
 app.get('/api/agents/:id/balance', async (req, res) => {
-  const agent = agentRegistry.get(req.params.id);
+  const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
   const coins = await suiClient.getCoins({
@@ -141,13 +135,13 @@ app.get('/api/agents/:id/balance', async (req, res) => {
 });
 
 app.post('/api/agents/:id/access', async (req, res) => {
-  const agent = agentRegistry.get(req.params.id);
+  const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
   const { endpoint } = req.body;
   if (!endpoint) return res.status(400).json({ error: 'endpoint required' });
 
-  const providerRegistry = getProviders();
+  const providerRegistry = getAllProviders();
   const provider = providerRegistry.find(p => p.endpoint === endpoint);
   if (!provider) return res.status(404).json({ error: 'Provider not found for endpoint' });
 
@@ -202,6 +196,7 @@ app.post('/api/agents/:id/access', async (req, res) => {
     openedAt: new Date().toISOString(),
   });
   agent.spentMist += depositAmount;
+  saveAgent(agent);
 
   const dataResponse = await fetch(`http://localhost:${PORT}${endpoint}`, {
     headers: { 'x-streamengine-stream-id': streamObjectId },
@@ -217,7 +212,7 @@ app.post('/api/agents/:id/access', async (req, res) => {
 });
 
 app.get('/api/agents/:id/streams', async (req, res) => {
-  const agent = agentRegistry.get(req.params.id);
+  const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
   const streamsWithBalance = await Promise.all(
@@ -240,7 +235,7 @@ app.get('/api/agents/:id/streams', async (req, res) => {
 });
 
 app.delete('/api/agents/:id/streams/:streamId', async (req, res) => {
-  const agent = agentRegistry.get(req.params.id);
+  const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
   const { streamId } = req.params;
@@ -266,15 +261,16 @@ app.delete('/api/agents/:id/streams/:streamId', async (req, res) => {
   });
 
   agent.activeStreams = agent.activeStreams.filter(s => s.streamId !== streamId);
+  saveAgent(agent);
 
   return res.json({ closed: true, streamId, refundTx: result.digest });
 });
 
 app.post('/api/agents/:id/start', async (req, res) => {
-  const agent = agentRegistry.get(req.params.id);
+  const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-  const providers = getProviders();
+  const providers = getAllProviders();
 
   const purposeToCategory: Record<string, string[]> = {
     research: ['Research', 'News', 'General'],
@@ -321,7 +317,7 @@ app.post('/api/agents/:id/start', async (req, res) => {
 });
 
 app.post('/api/agents/:id/fund-demo', async (req, res) => {
-  const agent = agentRegistry.get(req.params.id);
+  const agent = getAgent(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
   
   const { amountMist } = req.body;
@@ -360,7 +356,7 @@ function slugify(value: string): string {
 
 /** List all registered website listings */
 function listProviders(req: express.Request, res: express.Response) {
-  res.json({ providers: getProviders() });
+  res.json({ providers: getAllProviders() });
 }
 
 /** Register a new website listing */
@@ -369,7 +365,8 @@ function createProvider(req: express.Request, res: express.Response) {
   if (!providerAddress || !name || !websiteUrl || !ratePerSecond) {
     return res.status(400).json({ error: 'Missing required fields: providerAddress, name, websiteUrl, ratePerSecond' });
   }
-  const listing = registerProvider({
+  const listing = {
+    id: 'provider-' + Math.random().toString(36).substring(2, 10),
     providerAddress,
     name,
     websiteUrl,
@@ -377,7 +374,8 @@ function createProvider(req: express.Request, res: express.Response) {
     ratePerSecond: Number(ratePerSecond),
     description: description || '',
     category: category || 'General',
-  });
+  };
+  saveProvider(listing);
   res.status(201).json(listing);
 }
 
@@ -389,7 +387,7 @@ app.post('/api/providers', createProvider);
 
 /** Get a specific provider */
 app.get('/api/registry/providers/:id', (req, res) => {
-  const provider = getProviderById(req.params.id);
+  const provider = getProvider(req.params.id);
   if (!provider) return res.status(404).json({ error: 'Provider not found' });
   res.json(provider);
 });
@@ -415,17 +413,17 @@ app.get('/api/streams/:id/balance', async (req, res) => {
 
 /** Return provider earnings accumulated by successful access grants */
 app.get('/api/providers/:id/earnings', (req, res) => {
-  const earnings = getProviderEarnings(req.params.id);
-  if (!earnings) return res.status(404).json({ error: 'Provider not found' });
+  const provider = getProvider(req.params.id);
+  if (!provider) return res.status(404).json({ error: 'Provider not found' });
   res.json({
     providerId: req.params.id,
-    totalEarnedMist: earnings.totalEarnedMist,
+    totalEarnedMist: provider.earningsMist || 0,
   });
 });
 
 /** Health check */
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'FlowGate Gateway', providers: getProviders().length });
+  res.json({ status: 'ok', service: 'FlowGate Gateway', providers: getAllProviders().length });
 });
 
 // ============================================================
@@ -533,7 +531,42 @@ app.get('/api/premium/bloomberg/feed', requireX402Payment, (req, res) => {
 // ============================================================
 
 app.listen(PORT, () => {
-  const providers = getProviders();
+  const existingProviders = getAllProviders();
+  if (existingProviders.length === 0) {
+    const DEMO_PROVIDER_ADDRESS = '0x0000000000000000000000000000000000000000000000000000000000001234';
+    saveProvider({
+        id: 'x-social',
+        providerAddress: DEMO_PROVIDER_ADDRESS,
+        name: 'X (Twitter)',
+        description: 'Real-time posts, trending topics, and human interactions from X.com',
+        websiteUrl: 'https://x.com',
+        endpoint: '/api/premium/x-social/feed',
+        ratePerSecond: 100,
+        category: 'Social Media'
+    });
+    saveProvider({
+        id: 'reddit',
+        providerAddress: DEMO_PROVIDER_ADDRESS,
+        name: 'Reddit',
+        description: 'Upvoted threads, community discussions, and niche subreddit data',
+        websiteUrl: 'https://reddit.com',
+        endpoint: '/api/premium/reddit/feed',
+        ratePerSecond: 80,
+        category: 'Social Media'
+    });
+    saveProvider({
+        id: 'bloomberg',
+        providerAddress: DEMO_PROVIDER_ADDRESS,
+        name: 'Bloomberg',
+        description: 'Proprietary financial news, earnings call transcripts, and market commentary',
+        websiteUrl: 'https://bloomberg.com',
+        endpoint: '/api/premium/bloomberg/feed',
+        ratePerSecond: 200,
+        category: 'Finance'
+    });
+  }
+
+  const providers = getAllProviders();
   console.log(`\n🚀 FlowGate Gateway listening on http://localhost:${PORT}`);
   console.log(`\n📋 Registry: ${providers.length} websites listed`);
   providers.forEach(p => {

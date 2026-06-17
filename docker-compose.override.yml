@@ -1,0 +1,7 @@
+version: '3.8'
+
+services:
+  server:
+    environment:
+      # Override the secret for local development runs
+      - AGENT_KEY_SECRET=local-dev-secret-key-not-production

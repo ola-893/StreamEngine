@@ -1,6 +1,6 @@
 /** @license SPDX-License-Identifier: Apache-2.0 */
 
-const API_BASE = "http://localhost:3001";
+const API_BASE = import.meta.env.VITE_GATEWAY_URL || "";
 
 export { API_BASE };
 

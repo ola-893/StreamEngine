@@ -1,10 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
-import {
-  addProviderEarnings,
-  getProviderByEndpoint,
-  ratePerSecondToMist,
-} from '../registry/providers.ts';
+import { ratePerSecondToMist } from '../registry/providers.ts';
+import { updateProviderEarnings, getProviderByEndpoint } from '../db.ts';
 import { readStreamObjectState } from './streams.ts';
 
 const SUI_RPC_URL = process.env.SUI_RPC_URL || 'https://fullnode.testnet.sui.io:443';
@@ -48,7 +45,7 @@ export async function requireX402Payment(req: Request, res: Response, next: Next
           const stream = await readStreamObjectState(streamId);
           if (stream.balanceMist > 0n) {
               const earnedMist = stream.ratePerSecondMist ?? ratePerSecondMist;
-              if (provider) addProviderEarnings(provider.id, earnedMist);
+              if (provider) updateProviderEarnings(provider.id, earnedMist);
 
               console.log(`[Middleware] ✅ Valid stream ${streamId} found with balance: ${stream.balanceMist}`);
               (req as StreamEngineRequest).streamEngineAuth = {
@@ -72,7 +69,7 @@ export async function requireX402Payment(req: Request, res: Response, next: Next
               options: { showEffects: true, showInput: true }
           });
           if (tx.effects?.status.status === 'success') {
-              if (provider) addProviderEarnings(provider.id, ratePerSecondMist);
+              if (provider) updateProviderEarnings(provider.id, ratePerSecondMist);
               console.log(`[Middleware] ✅ Valid Fast-Path payment found: ${txDigest}`);
               return next();
           }

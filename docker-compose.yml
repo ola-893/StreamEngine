@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+    ports:
+      # Expose for direct local curl testing without nginx (optional)
+      - "3001:3001"
+    volumes:
+      # Persist SQLite database outside the container
+      - ./data:/app/data
+    environment:
+      - PORT=3001
+      - DB_PATH=/app/data/streamengine.db
+      - AGENT_KEY_SECRET=streamengine-hackathon-secret-key32
+
+  client:
+    build:
+      context: ./client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
