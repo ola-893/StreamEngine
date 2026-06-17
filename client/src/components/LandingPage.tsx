@@ -85,9 +85,10 @@ export default function LandingPage({
               Get Started<ArrowRight className="w-3.5 h-3.5" />
             </button>
           ) : (
-            <button onClick={() => navigate("/directory")} className="hidden lg:block px-4 py-2 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-[10px] font-mono font-bold transition-all uppercase cursor-pointer">
-              Guest Access
-            </button>
+            <></>
+            // <button onClick={() => navigate("/directory")} className="hidden lg:block px-4 py-2 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-[10px] font-mono font-bold transition-all uppercase cursor-pointer">
+            //   Guest Access
+            // </button>
           )}
         </div>
       </header>
