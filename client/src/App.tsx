@@ -21,6 +21,7 @@ import LandingPage from "./components/LandingPage";
 import OnboardingPage from "./components/OnboardingPage";
 import AgentCreatePage from "./components/AgentCreatePage";
 import AgentDashboardPage from "./components/AgentDashboardPage";
+import AgentDetailPage from "./components/AgentDetailPage";
 import RegisterPage from "./components/RegisterPage";
 import ProviderPage from "./components/ProviderPage";
 import DeveloperPage from "./components/DeveloperPage";
@@ -86,6 +87,10 @@ export default function App() {
 
   const handleUpdateAgent = (id: string, updates: Partial<Agent>) => {
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+  };
+
+  const handleDeleteAgent = (id: string) => {
+    setAgents((prev) => prev.filter((a) => a.id !== id));
   };
 
   // Auto-navigate when wallet connects on landing page
@@ -281,9 +286,9 @@ export default function App() {
       {/* SIDEBAR */}
       <aside className={`
         ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
-        fixed md:relative inset-y-0 left-0 z-40 transition-transform duration-300 ease-in-out
+        fixed md:sticky inset-y-0 md:inset-y-auto left-0 z-40 transition-transform duration-300 ease-in-out
         w-80 md:w-72 bg-[#E5E5ED] border-r border-stone-250 flex flex-col justify-between p-6 shrink-0
-        h-full md:h-auto overflow-y-auto
+        h-full md:h-screen md:top-0 overflow-y-auto
       `}>
         <div className="flex flex-col gap-6">
           {/* Brand */}
@@ -442,6 +447,19 @@ export default function App() {
                 <AgentDashboardPage
                   agents={agents}
                   onUpdateAgent={handleUpdateAgent}
+                />
+              )
+            } />
+            <Route path="/agent/:id" element={
+              !isWalletConnected ? (
+                <Navigate to="/" replace />
+              ) : !agentsLoaded ? (
+                <div className="flex items-center justify-center min-h-[60vh]"><span className="text-sm text-stone-400 font-sans">Loading agents...</span></div>
+              ) : (
+                <AgentDetailPage
+                  agents={agents}
+                  onUpdateAgent={handleUpdateAgent}
+                  onDeleteAgent={handleDeleteAgent}
                 />
               )
             } />

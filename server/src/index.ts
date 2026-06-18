@@ -3,7 +3,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { requireX402Payment } from './x402/middleware.ts';
-import { saveAgent, getAgent, getAllAgents, saveProvider, getProvider, getAllProviders, updateProviderEarnings } from './db.ts';
+import { saveAgent, getAgent, getAllAgents, deleteAgent as dbDeleteAgent, saveProvider, getProvider, getAllProviders, updateProviderEarnings } from './db.ts';
 import { readStreamObjectState, client as suiClient } from './x402/streams.ts';
 import crypto from 'crypto';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
@@ -55,6 +55,7 @@ process.on('unhandledRejection', (reason) => {
   console.error('[FATAL] Unhandled rejection:', reason);
 });
 
+const MINIMUM_STREAM_SECONDS = 3600;
 const PORT = parseInt(process.env.PORT || '3001');
 const app = express();
 
@@ -117,6 +118,23 @@ app.get('/api/agents', (req, res) => {
   res.json(getAllAgents());
 });
 
+app.delete('/api/agents/:id', (req, res) => {
+  try {
+    const agent = getAgent(req.params.id);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+    const deleted = dbDeleteAgent(req.params.id);
+    if (deleted) {
+      console.log(`[agents] Deleted agent "${agent.name}" (${agent.id})`);
+      return res.json({ deleted: true, agentId: agent.id });
+    }
+    return res.status(500).json({ error: 'Failed to delete agent' });
+  } catch (error: any) {
+    console.error('[agents/:id DELETE] Error:', error?.message || error);
+    res.status(500).json({ error: 'Delete failed', message: error?.message || String(error) });
+  }
+});
+
 app.get('/api/agents/:id', async (req, res) => {
   try {
     const agent = getAgent(req.params.id);
@@ -165,15 +183,23 @@ app.post('/api/agents/:id/access', async (req, res) => {
     const { endpoint } = req.body;
     if (!endpoint) return res.status(400).json({ error: 'endpoint required' });
 
+    console.log(`[access] Agent "${agent.name}" (${agent.id}) requesting access to ${endpoint}`);
+
     const providerRegistry = getAllProviders();
     const provider = providerRegistry.find(p => p.endpoint === endpoint);
-    if (!provider) return res.status(404).json({ error: 'Provider not found for endpoint' });
+    if (!provider) {
+      console.error(`[access] Provider not found for endpoint ${endpoint}`);
+      return res.status(404).json({ error: 'Provider not found for endpoint' });
+    }
+    console.log(`[access] Matched provider: ${provider.name} (${provider.id}) — rate: ${provider.ratePerSecond} MIST/sec`);
 
     const coins = await suiClient.getCoins({ owner: agent.walletAddress, coinType: '0x2::sui::SUI' });
     const balance = coins.data.reduce((sum, c) => sum + parseInt(c.balance), 0);
-    const minimumRequired = provider.ratePerSecond * 3600;
+    const minimumRequired = provider.ratePerSecond * MINIMUM_STREAM_SECONDS;
+    console.log(`[access] Agent wallet balance: ${balance} MIST (${balance / 1_000_000_000} SUI), minimum required: ${minimumRequired} MIST (${minimumRequired / 1_000_000_000} SUI)`);
 
     if (balance < minimumRequired) {
+      console.error(`[access] Insufficient balance for agent ${agent.id}`);
       return res.status(402).json({
         error: 'Insufficient agent wallet balance',
         walletAddress: agent.walletAddress,
@@ -187,8 +213,9 @@ app.post('/api/agents/:id/access', async (req, res) => {
     const { Transaction } = await import('@mysten/sui/transactions');
     const tx = new Transaction();
 
-    const depositAmount = provider.ratePerSecond * 3600;
+    const depositAmount = provider.ratePerSecond * MINIMUM_STREAM_SECONDS;
     const [depositCoin] = tx.splitCoins(tx.gas, [depositAmount]);
+    console.log(`[access] Creating stream — deposit: ${depositAmount} MIST (${depositAmount / 1_000_000_000} SUI)`);
 
     tx.moveCall({
       target: `${PACKAGE_ID}::stream::create_stream`,
@@ -202,16 +229,20 @@ app.post('/api/agents/:id/access', async (req, res) => {
       typeArguments: ['0x2::sui::SUI'],
     });
 
+    console.log(`[access] Signing and executing transaction...`);
     const result = await suiClient.signAndExecuteTransaction({
       transaction: tx,
       signer: keypair,
       options: { showEffects: true, showEvents: true }
     });
+    console.log(`[access] Transaction executed — digest: ${result.digest}`);
 
     const streamObjectId = result.effects?.created?.[0]?.reference?.objectId;
     if (!streamObjectId) {
+      console.error(`[access] Stream creation failed — no object ID in transaction effects`);
       return res.status(500).json({ error: 'Stream creation failed — no object ID in result' });
     }
+    console.log(`[access] Stream created — streamId: ${streamObjectId}`);
 
     agent.activeStreams.push({
       streamId: streamObjectId,
@@ -221,11 +252,14 @@ app.post('/api/agents/:id/access', async (req, res) => {
     });
     agent.spentMist += depositAmount;
     saveAgent(agent);
+    console.log(`[access] Agent state updated — activeStreams: ${agent.activeStreams.length}, spentMist: ${agent.spentMist}`);
 
+    console.log(`[access] Fetching data from ${endpoint}...`);
     const dataResponse = await fetch(`http://localhost:${PORT}${endpoint}`, {
       headers: { 'x-streamengine-stream-id': streamObjectId },
     });
     const data = await dataResponse.json();
+    console.log(`[access] Data fetched successfully from ${endpoint}`);
 
     return res.json({
       streamId: streamObjectId,
@@ -245,7 +279,7 @@ app.get('/api/agents/:id/streams', async (req, res) => {
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
     const streamsWithBalance = await Promise.all(
-      agent.activeStreams.map(async (stream) => {
+      agent.activeStreams.map(async (stream: AgentStream) => {
         try {
           const obj = await suiClient.getObject({
             id: stream.streamId,
@@ -273,7 +307,7 @@ app.delete('/api/agents/:id/streams/:streamId', async (req, res) => {
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
     const { streamId } = req.params;
-    const streamRecord = agent.activeStreams.find(s => s.streamId === streamId);
+    const streamRecord = agent.activeStreams.find((s: AgentStream) => s.streamId === streamId);
     if (!streamRecord) return res.status(404).json({ error: 'Stream not found on agent' });
 
     const keypair = getKeypairForAgent(agent);
@@ -294,7 +328,7 @@ app.delete('/api/agents/:id/streams/:streamId', async (req, res) => {
       signer: keypair,
     });
 
-    agent.activeStreams = agent.activeStreams.filter(s => s.streamId !== streamId);
+    agent.activeStreams = agent.activeStreams.filter((s: AgentStream) => s.streamId !== streamId);
     saveAgent(agent);
 
     return res.json({ closed: true, streamId, refundTx: result.digest });
@@ -309,7 +343,10 @@ app.post('/api/agents/:id/start', async (req, res) => {
     const agent = getAgent(req.params.id);
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
+    console.log(`[start] ▶ Starting agent "${agent.name}" (${agent.id}) — purpose: ${agent.purpose}`);
+
     const providers = getAllProviders();
+    console.log(`[start] Found ${providers.length} registered providers`);
 
     // All agent purposes can access all provider categories
     const purposeToCategory: Record<string, string[]> = {
@@ -320,18 +357,24 @@ app.post('/api/agents/:id/start', async (req, res) => {
       custom: ['Social Media', 'Finance', 'Research', 'News', 'General'],
     };
     const relevantCategories = purposeToCategory[agent.purpose] || [];
+    console.log(`[start] Relevant categories for "${agent.purpose}": [${relevantCategories.join(', ')}]`);
+
     const matchedProviders = providers.filter(p =>
       relevantCategories.some(cat => p.category?.toLowerCase() === cat.toLowerCase())
     );
+    console.log(`[start] Matched ${matchedProviders.length} providers: ${matchedProviders.map(p => p.name).join(', ') || 'none'}`);
 
     if (matchedProviders.length === 0) {
+      console.log(`[start] ✗ No matching providers found for agent "${agent.name}"`);
       return res.json({ message: 'No matching providers found for agent purpose', started: false });
     }
 
     const coins = await suiClient.getCoins({ owner: agent.walletAddress, coinType: '0x2::sui::SUI' });
     const balance = coins.data.reduce((sum, c) => sum + parseInt(c.balance), 0);
+    console.log(`[start] Agent wallet balance: ${balance} MIST (${balance / 1_000_000_000} SUI)`);
 
     if (balance === 0) {
+      console.log(`[start] ✗ Agent wallet is empty — cannot start`);
       return res.status(402).json({
         error: 'Agent wallet is empty',
         walletAddress: agent.walletAddress,
@@ -339,10 +382,13 @@ app.post('/api/agents/:id/start', async (req, res) => {
       });
     }
 
-    const affordable = matchedProviders.find(p => balance >= p.ratePerSecond * 60);
+    const affordable = matchedProviders.find(p => balance >= p.ratePerSecond * MINIMUM_STREAM_SECONDS);
     if (!affordable) {
-      return res.status(402).json({ error: 'Insufficient balance for any matched provider' });
+      console.log(`[start] ✗ Insufficient balance for any matched provider (need ≥${MINIMUM_STREAM_SECONDS}s of streaming)`);
+      return res.status(402).json({ error: 'Insufficient balance for any matched provider', message: `Fund the agent wallet with at least ${Math.ceil((matchedProviders[0]?.ratePerSecond || 100) * MINIMUM_STREAM_SECONDS / 1_000_000_000)} SUI to start` });
     }
+    console.log(`[start] Selected provider: ${affordable.name} (${affordable.ratePerSecond} MIST/sec)`);
+    console.log(`[start] Opening stream to ${affordable.endpoint}...`);
 
     const accessRes = await fetch(`http://localhost:${PORT}/api/agents/${agent.id}/access`, {
       method: 'POST',
@@ -351,14 +397,120 @@ app.post('/api/agents/:id/start', async (req, res) => {
     });
     const accessData = await accessRes.json();
 
-    return res.json({
-      started: true,
-      provider: affordable.name,
-      ...accessData,
-    });
+    if (accessData.streamId) {
+      console.log(`[start] ✓ Agent "${agent.name}" started successfully`);
+      console.log(`[start]   provider: ${affordable.name}`);
+      console.log(`[start]   streamId: ${accessData.streamId}`);
+      console.log(`[start]   tx: ${accessData.creationTx}`);
+      console.log(`[start]   deposit: ${accessData.depositMist} MIST (${accessData.depositMist / 1_000_000_000} SUI)`);
+      return res.json({
+        started: true,
+        provider: affordable.name,
+        ...accessData,
+      });
+    } else {
+      console.error(`[start] ✗ Access failed: ${JSON.stringify(accessData)}`);
+      return res.status(accessRes.status || 500).json({
+        started: false,
+        provider: affordable.name,
+        error: accessData.error || 'Stream creation failed',
+        message: accessData.message || 'Could not open a payment stream',
+      });
+    }
   } catch (error: any) {
     console.error('[agents/:id/start] Error:', error?.message || error);
     res.status(500).json({ error: 'Failed to start agent', message: error?.message || String(error) });
+  }
+});
+
+// ============================================================
+//  STREAM SESSION — Live streaming state + data fetch
+// ============================================================
+
+app.get('/api/agents/:id/streams/:streamId/state', async (req, res) => {
+  try {
+    const agent = getAgent(req.params.id);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+    const stream = agent.activeStreams.find((s: AgentStream) => s.streamId === req.params.streamId);
+    if (!stream) return res.status(404).json({ error: 'Stream not found on agent' });
+
+    // Read live on-chain balance
+    let balanceMist = 0;
+    try {
+      const obj = await suiClient.getObject({
+        id: stream.streamId,
+        options: { showContent: true },
+      });
+      const fields = (obj.data?.content as any)?.fields;
+      balanceMist = parseInt(fields?.balance?.fields?.value ?? '0');
+    } catch {
+      // fallback to 0
+    }
+
+    const elapsedMs = Date.now() - new Date(stream.openedAt).getTime();
+    const elapsedSec = Math.floor(elapsedMs / 1000);
+    const ratePerSec = stream.ratePerSecondMist / 1_000_000_000;
+    const drainedMist = Math.min(elapsedSec * stream.ratePerSecondMist, stream.ratePerSecondMist * MINIMUM_STREAM_SECONDS - balanceMist);
+    const remainingSec = ratePerSec > 0 ? Math.floor(balanceMist / stream.ratePerSecondMist) : 0;
+
+    return res.json({
+      streamId: stream.streamId,
+      endpoint: stream.endpoint,
+      openedAt: stream.openedAt,
+      ratePerSecondMist: stream.ratePerSecondMist,
+      rateSuiPerSec: ratePerSec,
+      balanceMist,
+      balanceSui: balanceMist / 1_000_000_000,
+      elapsedSec,
+      remainingSec,
+      drainedMist,
+      drainedSui: drainedMist / 1_000_000_000,
+      status: balanceMist > 0 ? 'streaming' : 'depleted',
+    });
+  } catch (error: any) {
+    console.error('[streams/:id/state] Error:', error?.message || error);
+    res.status(500).json({ error: 'Failed to get stream state', message: error?.message || String(error) });
+  }
+});
+
+app.post('/api/agents/:id/streams/:streamId/fetch-data', async (req, res) => {
+  try {
+    const agent = getAgent(req.params.id);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+    const stream = agent.activeStreams.find((s: AgentStream) => s.streamId === req.params.streamId);
+    if (!stream) return res.status(404).json({ error: 'Stream not found on agent' });
+
+    console.log(`[stream-session] Agent "${agent.name}" fetching data from ${stream.endpoint}`);
+
+    const dataResponse = await fetch(`http://localhost:${PORT}${stream.endpoint}`, {
+      headers: { 'x-streamengine-stream-id': stream.streamId },
+    });
+    const data = await dataResponse.json();
+    console.log(`[stream-session] Data fetched from ${stream.endpoint} — ${(JSON.stringify(data).length / 1024).toFixed(1)}KB`);
+
+    // Read current on-chain balance after fetch
+    let balanceMist = 0;
+    try {
+      const obj = await suiClient.getObject({
+        id: stream.streamId,
+        options: { showContent: true },
+      });
+      const fields = (obj.data?.content as any)?.fields;
+      balanceMist = parseInt(fields?.balance?.fields?.value ?? '0');
+    } catch {}
+
+    return res.json({
+      data,
+      balanceMist,
+      balanceSui: balanceMist / 1_000_000_000,
+      fetchedAt: new Date().toISOString(),
+      sizeBytes: JSON.stringify(data).length,
+    });
+  } catch (error: any) {
+    console.error('[stream-session/fetch-data] Error:', error?.message || error);
+    res.status(500).json({ error: 'Data fetch failed', message: error?.message || String(error) });
   }
 });
 

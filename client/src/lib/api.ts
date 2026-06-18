@@ -202,6 +202,68 @@ export async function fundAgent(
   return res.json();
 }
 
+export interface StreamState {
+  streamId: string;
+  endpoint: string;
+  openedAt: string;
+  ratePerSecondMist: number;
+  rateSuiPerSec: number;
+  balanceMist: number;
+  balanceSui: number;
+  elapsedSec: number;
+  remainingSec: number;
+  drainedMist: number;
+  drainedSui: number;
+  status: "streaming" | "depleted";
+}
+
+export interface FetchDataResponse {
+  data: any;
+  balanceMist: number;
+  balanceSui: number;
+  fetchedAt: string;
+  sizeBytes: number;
+}
+
+export async function getStreamState(
+  agentId: string,
+  streamId: string
+): Promise<StreamState> {
+  const res = await fetch(
+    `${API_BASE}/api/agents/${agentId}/streams/${streamId}/state`
+  );
+  if (!res.ok) throw new Error("Failed to get stream state");
+  return res.json();
+}
+
+export async function fetchStreamData(
+  agentId: string,
+  streamId: string
+): Promise<FetchDataResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/agents/${agentId}/streams/${streamId}/fetch-data`,
+    { method: "POST", headers: { "Content-Type": "application/json" } }
+  );
+  if (!res.ok) throw new Error("Failed to fetch stream data");
+  return res.json();
+}
+
+export interface DeleteAgentResponse {
+  deleted: boolean;
+  agentId: string;
+}
+
+export async function deleteAgent(agentId: string): Promise<DeleteAgentResponse> {
+  const res = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to delete agent");
+  }
+  return res.json();
+}
+
 // ============================================================
 //  Provider API
 // ============================================================

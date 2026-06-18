@@ -3,10 +3,15 @@ import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { ratePerSecondToMist } from '../registry/providers.ts';
 import { updateProviderEarnings, getProviderByEndpoint } from '../db.ts';
 import { readStreamObjectState } from './streams.ts';
+import { CurlTransport } from './curl-transport.ts';
+import { getSuiRpcUrls, SUI_NETWORK } from './rpc-config.ts';
 
-const SUI_RPC_URL = process.env.SUI_RPC_URL || `https://fullnode.${process.env.SUI_NETWORK || 'testnet'}.sui.io:443`;
+const SUI_RPC_URLS = getSuiRpcUrls();
 export const PACKAGE_ID = process.env.SYNAPSE_PACKAGE_ID || '0xb05b3964df8b88a86cda6b192893399966014af9dd6fc6beb26f1343a0495495';
-const client = new SuiJsonRpcClient({ url: SUI_RPC_URL, network: 'testnet' });
+const client = new SuiJsonRpcClient({
+  transport: new CurlTransport(SUI_RPC_URLS),
+  network: SUI_NETWORK,
+});
 
 interface StreamEngineRequest extends Request {
   streamEngineAuth?: {
