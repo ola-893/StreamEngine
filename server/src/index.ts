@@ -82,6 +82,11 @@ interface Agent {
   createdAt: string;
 }
 
+function toPublicAgent(agent: any) {
+  const { encryptedPrivateKey, ...publicAgent } = agent;
+  return publicAgent;
+}
+
 // ============================================================
 //  AGENTS API
 // ============================================================
@@ -110,12 +115,11 @@ app.post('/api/agents', (req, res) => {
   
   saveAgent(newAgent);
   
-  const { encryptedPrivateKey: _, ...agentWithoutSecret } = newAgent;
-  res.status(201).json(agentWithoutSecret);
+  res.status(201).json(toPublicAgent(newAgent));
 });
 
 app.get('/api/agents', (req, res) => {
-  res.json(getAllAgents());
+  res.json(getAllAgents().map(toPublicAgent));
 });
 
 app.delete('/api/agents/:id', (req, res) => {
@@ -140,8 +144,7 @@ app.get('/api/agents/:id', async (req, res) => {
     const agent = getAgent(req.params.id);
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
     
-    const { encryptedPrivateKey: _, ...agentWithoutSecret } = agent;
-    res.json(agentWithoutSecret);
+    res.json(toPublicAgent(agent));
   } catch (error: any) {
     console.error('[agents/:id] Error:', error?.message || error);
     res.status(500).json({ error: 'Internal server error', message: error?.message || String(error) });
