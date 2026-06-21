@@ -80,6 +80,11 @@ export async function getAllAgents(ownerAddress?: string): Promise<any[]> {
   } else {
     rows = await sql`SELECT * FROM agents ORDER BY created_at DESC`;
   }
+  // Ensure rows is an array before mapping
+  if (!Array.isArray(rows)) {
+    console.error('[getAllAgents] Expected array but got:', typeof rows, rows);
+    return [];
+  }
   return rows.map(rowToAgent);
 }
 
