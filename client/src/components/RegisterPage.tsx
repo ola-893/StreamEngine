@@ -132,6 +132,9 @@ export default function RegisterPage({ onAddEndpoint, walletAddress, isWalletCon
         }),
       });
       const listing = await res.json();
+      if (!res.ok) {
+        throw new Error(listing.error || listing.message || `Registration failed (${res.status})`);
+      }
       const finalPath = listing.endpoint || endpointPath.trim() || `/api/premium/listed/${provider.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}/feed`;
       setRegisteredEndpoint(finalPath);
 

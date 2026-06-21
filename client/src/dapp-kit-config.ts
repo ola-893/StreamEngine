@@ -8,12 +8,16 @@ const SuiClient = BaseClient as any;
 export const dAppKit = createDAppKit({
   networks: ['testnet', 'mainnet'] as const,
   defaultNetwork: 'testnet',
-  createClient: (network) =>
-    new SuiClient({
+  createClient: (network) => {
+    const client = new SuiClient({
       url:
         network === 'testnet'
           ? 'https://fullnode.testnet.sui.io:443'
           : 'https://fullnode.mainnet.sui.io:443',
-    }),
+    });
+    // dAppKit resolves the chain via client.network — must be set for signAndExecuteTransaction
+    (client as any).network = network;
+    return client;
+  },
   enableBurnerWallet: true,
 });

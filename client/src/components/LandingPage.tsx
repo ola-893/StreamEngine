@@ -48,9 +48,7 @@ export default function LandingPage({
       {/* TOP BAR */}
       <header className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between relative z-50">
         <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate("/")}>
-          <div className="flex items-center gap-1 bg-[#1C1A17] text-[#E5E5ED] p-2 leading-none font-black text-sm tracking-tighter">
-            <span>Σ</span><span>N</span>
-          </div>
+          <img src="/logo.svg" alt="FlowGate" className="w-8 h-8" />
           <span className="font-mono text-xs tracking-widest font-black uppercase">FLOWGATE</span>
         </div>
 
@@ -99,7 +97,7 @@ export default function LandingPage({
           <div className="flex flex-col gap-5">
             <motion.div initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }} className="flex items-center gap-2 text-[#8C2C16] font-mono text-[10px] tracking-[0.25em] uppercase font-bold">
               <span className="w-1.5 h-1.5 bg-[#8C2C16]" />
-              DECENTRALIZED AGENTIC PAYMENT RAIL // SUI MAINNET
+              DECENTRALIZED AGENTIC PAYMENT RAIL // SUI TESTNET
             </motion.div>
 
             <h1 className="font-sans text-5xl sm:text-6xl xl:text-7xl font-semibold tracking-tighter text-[#1C1A17] leading-[0.92] select-none">
@@ -271,7 +269,7 @@ export default function LandingPage({
                         <span className="font-serif font-black text-[14px] text-emerald-600">+0.05 SUI Received</span>
                       </div>
                     </div>
-                    <p className="text-[12px] text-stone-605 leading-relaxed">Every prompt request from AI agents triggers immediate ledger transfer. Payments are cleared off-chain through micropayment hashes and bundled safely to SUI network Mainnet.</p>
+                    <p className="text-[12px] text-stone-605 leading-relaxed">Every prompt request from AI agents triggers immediate ledger transfer. Payments are cleared off-chain through micropayment hashes and bundled safely to SUI network Testnet.</p>
                     <button onClick={() => navigate("/directory")} className="w-full py-3 bg-[#1C1A17] hover:bg-[#2E2E3A] text-[#FAF9F5] font-mono font-bold text-[10px] uppercase rounded-xl flex items-center justify-center gap-2 tracking-wider transition-colors">
                       Browse registered channels<ArrowRight className="w-3.5 h-3.5" />
                     </button>
@@ -316,9 +314,9 @@ export default function LandingPage({
       <footer className="max-w-7xl mx-auto px-6 mt-20 pt-8 border-t border-[#1C1A17]/10 flex flex-col md:flex-row items-center justify-between gap-4 select-none relative z-30">
         <span className="font-mono text-[9px] text-[#1C1A17]/45 uppercase font-bold tracking-wider">© 2026 FLOWGATE_INIT • DECENTRALIZED PAYMENT CHANNELS SECURED</span>
         <div className="flex items-center gap-6 font-mono text-[9px] font-bold text-[#1C1A17]/50 uppercase">
-          <a href="#github" className="hover:text-[#1C1A17] transition-colors">GITHUB</a>
+          {/* <a href="#github" className="hover:text-[#1C1A17] transition-colors">GITHUB</a>
           <a href="#whitepaper" className="hover:text-[#1C1A17] transition-colors">WHITEPAPER</a>
-          <a href="#discord" className="hover:text-[#1C1A17] transition-colors">DISCORD</a>
+          <a href="#discord" className="hover:text-[#1C1A17] transition-colors">DISCORD</a> */}
         </div>
       </footer>
     </div>

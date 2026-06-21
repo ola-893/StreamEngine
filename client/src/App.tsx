@@ -50,7 +50,10 @@ export default function App() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/agents`);
+      const url = walletAddress
+        ? `${API_BASE}/api/agents?ownerAddress=${encodeURIComponent(walletAddress)}`
+        : `${API_BASE}/api/agents`;
+      const res = await fetch(url);
       if (res.ok) {
         setServerReachable(true);
         const data = await res.json();
@@ -75,7 +78,7 @@ export default function App() {
     } finally {
       setAgentsLoaded(true);
     }
-  }, []);
+  }, [walletAddress]);
 
   useEffect(() => {
     fetchAgents();
@@ -290,19 +293,19 @@ export default function App() {
         h-full md:h-screen md:top-0 overflow-y-auto
       `}>
         <div className="flex flex-col gap-6">
-          {/* Brand */}
-          <div className="flex items-center justify-between pb-4 border-b border-stone-200">
-            <div className="flex flex-col">
-              <span className="font-sans font-bold text-xl text-[#1C1A17]">Flowgate</span>
-              <span className="text-[10px] font-sans text-[#7C7567]">Node Workspace v0.16</span>
+          {/* Brand */}            <div className="flex items-center gap-3 pb-4 border-b border-stone-200">
+              <img src="/logo.svg" alt="FlowGate" className="w-9 h-9" />
+              <div className="flex flex-col">
+                <span className="font-sans font-bold text-xl text-[#1C1A17]">Flowgate</span>
+                <span className="text-[10px] font-sans text-[#7C7567]">Node Workspace v0.16</span>
+              </div>
+              <button
+                onClick={() => { navigate("/"); setMobileMenuOpen(false); }}
+                className="ml-auto px-3 py-1.5 text-[10px] font-mono border border-stone-300 bg-[#FAF9F5] hover:border-[#1C1A17] hover:bg-[#1C1A17]/5 uppercase transition-all rounded-full shadow-sm cursor-pointer"
+              >
+                Home
+              </button>
             </div>
-            <button
-              onClick={() => { navigate("/"); setMobileMenuOpen(false); }}
-              className="px-3 py-1.5 text-[10px] font-mono border border-stone-300 bg-[#FAF9F5] hover:border-[#1C1A17] hover:bg-[#1C1A17]/5 uppercase transition-all rounded-full shadow-sm cursor-pointer"
-            >
-              Home
-            </button>
-          </div>
 
           {/* Wallet Card */}
           <div className="p-4 bg-[#FAF9F5] border border-stone-200/80">
@@ -459,6 +462,7 @@ export default function App() {
                   agents={agents}
                   onUpdateAgent={handleUpdateAgent}
                   onDeleteAgent={handleDeleteAgent}
+                  walletAddress={walletAddress}
                 />
               )
             } />
@@ -482,32 +486,7 @@ export default function App() {
   );
 }
 
-// Fallback demo endpoints when backend is offline
+// Fallback: no hardcoded demo endpoints — only user-registered providers
 function getDefaultEndpoints(): Endpoint[] {
-  return [
-    {
-      id: "x-social", name: "X (Twitter)", type: "api", status: "active",
-      price: 0.0001, unit: "sec of access", dataProvider: "X (Twitter)",
-      latency: 12, throughput: "42.4 MB/s", rating: 4.95, uptime: 99.99,
-      description: "Real-time posts, trending topics, and human interactions from X.com",
-      endpointUrl: "https://x.com", inputs: [], outputs: [],
-      apiKeyRequired: false, totalRequests: 140392, activeConsumers: 5, gasSui: 0.002
-    },
-    {
-      id: "reddit", name: "Reddit", type: "api", status: "active",
-      price: 0.0001, unit: "sec of access", dataProvider: "Reddit",
-      latency: 15, throughput: "38.2 MB/s", rating: 4.88, uptime: 99.85,
-      description: "Upvoted threads, community discussions, and niche subreddit data",
-      endpointUrl: "https://reddit.com", inputs: [], outputs: [],
-      apiKeyRequired: true, totalRequests: 89422, activeConsumers: 12, gasSui: 0.015
-    },
-    {
-      id: "bloomberg", name: "Bloomberg", type: "api", status: "active",
-      price: 0.0001, unit: "sec of access", dataProvider: "Bloomberg",
-      latency: 8, throughput: "120.8 MB/s", rating: 4.91, uptime: 99.72,
-      description: "Proprietary financial news, earnings call transcripts, and market commentary",
-      endpointUrl: "https://bloomberg.com", inputs: [], outputs: [],
-      apiKeyRequired: true, totalRequests: 110291, activeConsumers: 2, gasSui: 0.02
-    }
-  ];
+  return [];
 }

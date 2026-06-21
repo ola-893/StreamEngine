@@ -19,7 +19,8 @@ export async function initDb() {
       wallet_address TEXT NOT NULL,
       encrypted_private_key TEXT NOT NULL,
       active_streams TEXT NOT NULL DEFAULT '[]',
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      owner_address TEXT
     )
   `;
 
@@ -37,17 +38,19 @@ export async function initDb() {
       created_at TEXT NOT NULL
     )
   `;
+
+  await sql`ALTER TABLE agents ADD COLUMN IF NOT EXISTS owner_address TEXT`;
 }
 
 // Agent helpers
 export async function saveAgent(agent: any): Promise<void> {
   await sql`
     INSERT INTO agents (id, name, description, purpose, budget_mist, spent_mist,
-      wallet_address, encrypted_private_key, active_streams, created_at)
+      wallet_address, encrypted_private_key, active_streams, created_at, owner_address)
     VALUES (${agent.id}, ${agent.name}, ${agent.description ?? ''}, ${agent.purpose},
       ${agent.budgetMist}, ${agent.spentMist}, ${agent.walletAddress},
       ${agent.encryptedPrivateKey}, ${JSON.stringify(agent.activeStreams ?? [])},
-      ${agent.createdAt})
+      ${agent.createdAt}, ${agent.ownerAddress ?? null})
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
       description = EXCLUDED.description,
@@ -56,7 +59,8 @@ export async function saveAgent(agent: any): Promise<void> {
       spent_mist = EXCLUDED.spent_mist,
       wallet_address = EXCLUDED.wallet_address,
       encrypted_private_key = EXCLUDED.encrypted_private_key,
-      active_streams = EXCLUDED.active_streams
+      active_streams = EXCLUDED.active_streams,
+      owner_address = EXCLUDED.owner_address
   `;
 }
 
@@ -65,8 +69,17 @@ export async function getAgent(id: string): Promise<any | null> {
   return rows[0] ? rowToAgent(rows[0]) : null;
 }
 
-export async function getAllAgents(): Promise<any[]> {
-  const rows = await sql`SELECT * FROM agents ORDER BY created_at DESC`;
+export async function getAllAgents(ownerAddress?: string): Promise<any[]> {
+  let rows;
+  if (ownerAddress) {
+    rows = await sql`
+      SELECT * FROM agents
+      WHERE owner_address = ${ownerAddress} OR owner_address IS NULL
+      ORDER BY created_at DESC
+    `;
+  } else {
+    rows = await sql`SELECT * FROM agents ORDER BY created_at DESC`;
+  }
   return rows.map(rowToAgent);
 }
 
@@ -82,6 +95,7 @@ function rowToAgent(row: any): any {
     encryptedPrivateKey: row.encrypted_private_key,
     activeStreams: JSON.parse(row.active_streams),
     createdAt: row.created_at,
+    ownerAddress: row.owner_address,
   };
 }
 

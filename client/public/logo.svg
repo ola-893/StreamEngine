@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" fill="none">
+  <!-- Background -->
+  <rect width="320" height="320" rx="72" fill="#1C1A17"/>
+  
+  <!-- Two parallel vertical bars (the "gate") -->
+  <rect x="108" y="72" width="16" height="176" rx="8" fill="#FAF9F5"/>
+  <rect x="196" y="72" width="16" height="176" rx="8" fill="#FAF9F5"/>
+  
+  <!-- Horizontal connector at top (the arch) -->
+  <rect x="108" y="72" width="104" height="16" rx="8" fill="#FAF9F5"/>
+  
+  <!-- Three flowing horizontal lines through the gate -->
+  <rect x="136" y="116" width="48" height="6" rx="3" fill="#8C2C16"/>
+  <rect x="128" y="148" width="64" height="6" rx="3" fill="#8C2C16" opacity="0.7"/>
+  <rect x="136" y="180" width="48" height="6" rx="3" fill="#8C2C16" opacity="0.45"/>
+  
+  <!-- Small accent dot -->
+  <circle cx="160" cy="148" r="4" fill="#FAF9F5"/>
+</svg>

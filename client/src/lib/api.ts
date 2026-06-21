@@ -292,6 +292,32 @@ export interface DeleteAgentResponse {
   agentId: string;
 }
 
+export interface WithdrawResponse {
+  success: boolean;
+  digest: string;
+  withdrawnMist: number;
+  withdrawnSui: number;
+  remainingMist: number;
+  remainingSui: number;
+  toAddress: string;
+}
+
+export async function withdrawAgent(
+  agentId: string,
+  ownerAddress: string
+): Promise<WithdrawResponse> {
+  const res = await fetch(`${API_BASE}/api/agents/${agentId}/withdraw`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ownerAddress }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to withdraw");
+  }
+  return res.json();
+}
+
 export async function deleteAgent(agentId: string): Promise<DeleteAgentResponse> {
   const res = await fetch(`${API_BASE}/api/agents/${agentId}`, {
     method: "DELETE",
@@ -391,6 +417,50 @@ export async function deleteProvider(
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete provider");
+  return res.json();
+}
+
+// ============================================================
+//  Provider Withdrawal API
+// ============================================================
+
+export interface ProviderStream {
+  streamId: string;
+  agentId: string;
+  agentName: string;
+  agentPurpose: string;
+  endpoint: string;
+  ratePerSecondMist: number;
+  durationSeconds: number;
+  openedAt: string;
+  depositMist: number;
+  onChainBalanceMist: number;
+  onChainBalanceSui: number;
+  claimableMist: number;
+  claimableSui: number;
+  sender: string;
+  recipient: string;
+  lastWithdrawalMs: number;
+  status: 'streaming' | 'depleted';
+  chainError: string | null;
+}
+
+export interface ProviderStreamsResponse {
+  providerId: string;
+  providerAddress: string;
+  totalStreams: number;
+  totalClaimableMist: number;
+  totalClaimableSui: number;
+  totalOnChainBalanceMist: number;
+  totalOnChainBalanceSui: number;
+  streams: ProviderStream[];
+}
+
+export async function getProviderStreams(
+  providerId: string
+): Promise<ProviderStreamsResponse> {
+  const res = await fetch(`${API_BASE}/api/providers/${providerId}/streams`);
+  if (!res.ok) throw new Error("Failed to fetch provider streams");
   return res.json();
 }
 
