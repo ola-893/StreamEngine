@@ -49,10 +49,14 @@ export default function App() {
   const [serverReachable, setServerReachable] = useState<boolean | null>(null);
 
   const fetchAgents = useCallback(async () => {
+    if (!walletAddress) {
+      setAgents([]);
+      setAgentsLoaded(true);
+      return;
+    }
+
     try {
-      const url = walletAddress
-        ? `${API_BASE}/api/agents?ownerAddress=${encodeURIComponent(walletAddress)}`
-        : `${API_BASE}/api/agents`;
+      const url = `${API_BASE}/api/agents?ownerAddress=${encodeURIComponent(walletAddress)}`;
       const res = await fetch(url);
       if (res.ok) {
         setServerReachable(true);
@@ -449,6 +453,7 @@ export default function App() {
                 <AgentDashboardPage
                   agents={agents}
                   onUpdateAgent={handleUpdateAgent}
+                  walletAddress={walletAddress}
                 />
               )
             } />

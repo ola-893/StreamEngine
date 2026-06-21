@@ -126,11 +126,23 @@ export interface HealthStatus {
 //  Agent API
 // ============================================================
 
+function requireOwnerAddress(ownerAddress: string | null | undefined): string {
+  if (!ownerAddress) {
+    throw new Error("Connect your wallet first — owner address is required");
+  }
+  return ownerAddress;
+}
+
+function ownerQuery(ownerAddress: string | null | undefined): string {
+  return `ownerAddress=${encodeURIComponent(requireOwnerAddress(ownerAddress))}`;
+}
+
 export async function createAgent(params: {
   name: string;
   description?: string;
   purpose: string;
   budgetMist: number;
+  ownerAddress: string;
 }): Promise<BackendAgent> {
   const res = await fetch(`${API_BASE}/api/agents`, {
     method: "POST",
@@ -144,34 +156,35 @@ export async function createAgent(params: {
   return res.json();
 }
 
-export async function listAgents(): Promise<BackendAgent[]> {
-  const res = await fetch(`${API_BASE}/api/agents`);
+export async function listAgents(ownerAddress: string): Promise<BackendAgent[]> {
+  const res = await fetch(`${API_BASE}/api/agents?${ownerQuery(ownerAddress)}`);
   if (!res.ok) throw new Error("Failed to list agents");
   return res.json();
 }
 
-export async function getAgent(id: string): Promise<BackendAgent> {
-  const res = await fetch(`${API_BASE}/api/agents/${id}`);
+export async function getAgent(id: string, ownerAddress: string): Promise<BackendAgent> {
+  const res = await fetch(`${API_BASE}/api/agents/${id}?${ownerQuery(ownerAddress)}`);
   if (!res.ok) throw new Error("Agent not found");
   return res.json();
 }
 
-export async function getAgentBalance(id: string): Promise<AgentBalance> {
-  const res = await fetch(`${API_BASE}/api/agents/${id}/balance`);
+export async function getAgentBalance(id: string, ownerAddress: string): Promise<AgentBalance> {
+  const res = await fetch(`${API_BASE}/api/agents/${id}/balance?${ownerQuery(ownerAddress)}`);
   if (!res.ok) throw new Error("Failed to fetch agent balance");
   return res.json();
 }
 
-export async function listAgentStreams(id: string): Promise<AgentStreamsResponse> {
-  const res = await fetch(`${API_BASE}/api/agents/${id}/streams`);
+export async function listAgentStreams(id: string, ownerAddress: string): Promise<AgentStreamsResponse> {
+  const res = await fetch(`${API_BASE}/api/agents/${id}/streams?${ownerQuery(ownerAddress)}`);
   if (!res.ok) throw new Error("Failed to list agent streams");
   return res.json();
 }
 
-export async function discoverProviders(agentId: string): Promise<DiscoveryResponse> {
+export async function discoverProviders(agentId: string, ownerAddress: string): Promise<DiscoveryResponse> {
   const res = await fetch(`${API_BASE}/api/agents/${agentId}/discover`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ownerAddress: requireOwnerAddress(ownerAddress) }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -182,10 +195,11 @@ export async function discoverProviders(agentId: string): Promise<DiscoveryRespo
 
 export async function closeAgentStream(
   agentId: string,
-  streamId: string
+  streamId: string,
+  ownerAddress: string
 ): Promise<CloseStreamResponse> {
   const res = await fetch(
-    `${API_BASE}/api/agents/${agentId}/streams/${streamId}`,
+    `${API_BASE}/api/agents/${agentId}/streams/${streamId}?${ownerQuery(ownerAddress)}`,
     { method: "DELETE" }
   );
   if (!res.ok) throw new Error("Failed to close stream");
@@ -194,12 +208,13 @@ export async function closeAgentStream(
 
 export async function startAgent(
   agentId: string,
-  durationSeconds?: number
+  durationSeconds: number | undefined,
+  ownerAddress: string
 ): Promise<StartResponse> {
   const res = await fetch(`${API_BASE}/api/agents/${agentId}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ durationSeconds }),
+    body: JSON.stringify({ durationSeconds, ownerAddress: requireOwnerAddress(ownerAddress) }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -210,12 +225,13 @@ export async function startAgent(
 
 export async function accessEndpoint(
   agentId: string,
-  endpoint: string
+  endpoint: string,
+  ownerAddress: string
 ): Promise<AccessResponse> {
   const res = await fetch(`${API_BASE}/api/agents/${agentId}/access`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ endpoint }),
+    body: JSON.stringify({ endpoint, ownerAddress: requireOwnerAddress(ownerAddress) }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -226,12 +242,13 @@ export async function accessEndpoint(
 
 export async function fundAgent(
   agentId: string,
-  amountMist: number
+  amountMist: number,
+  ownerAddress: string
 ): Promise<FundResponse> {
   const res = await fetch(`${API_BASE}/api/agents/${agentId}/fund-demo`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ amountMist }),
+    body: JSON.stringify({ amountMist, ownerAddress: requireOwnerAddress(ownerAddress) }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -266,10 +283,11 @@ export interface FetchDataResponse {
 
 export async function getStreamState(
   agentId: string,
-  streamId: string
+  streamId: string,
+  ownerAddress: string
 ): Promise<StreamState> {
   const res = await fetch(
-    `${API_BASE}/api/agents/${agentId}/streams/${streamId}/state`
+    `${API_BASE}/api/agents/${agentId}/streams/${streamId}/state?${ownerQuery(ownerAddress)}`
   );
   if (!res.ok) throw new Error("Failed to get stream state");
   return res.json();
@@ -277,11 +295,16 @@ export async function getStreamState(
 
 export async function fetchStreamData(
   agentId: string,
-  streamId: string
+  streamId: string,
+  ownerAddress: string
 ): Promise<FetchDataResponse> {
   const res = await fetch(
     `${API_BASE}/api/agents/${agentId}/streams/${streamId}/fetch-data`,
-    { method: "POST", headers: { "Content-Type": "application/json" } }
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ownerAddress: requireOwnerAddress(ownerAddress) }),
+    }
   );
   if (!res.ok) throw new Error("Failed to fetch stream data");
   return res.json();
@@ -318,8 +341,8 @@ export async function withdrawAgent(
   return res.json();
 }
 
-export async function deleteAgent(agentId: string): Promise<DeleteAgentResponse> {
-  const res = await fetch(`${API_BASE}/api/agents/${agentId}`, {
+export async function deleteAgent(agentId: string, ownerAddress: string): Promise<DeleteAgentResponse> {
+  const res = await fetch(`${API_BASE}/api/agents/${agentId}?${ownerQuery(ownerAddress)}`, {
     method: "DELETE",
   });
   if (!res.ok) {

@@ -14,9 +14,11 @@ import {
 
 function AgentCardBalancePoller({
   agentId,
+  ownerAddress,
   onBalanceUpdate,
 }: {
   agentId: string;
+  ownerAddress: string | null;
   onBalanceUpdate: (balance: AgentBalance) => void;
 }) {
   const onUpdateRef = React.useRef(onBalanceUpdate);
@@ -27,8 +29,9 @@ function AgentCardBalancePoller({
   useEffect(() => {
     let isActive = true;
     const poll = async () => {
+      if (!ownerAddress) return;
       try {
-        const data = await getAgentBalance(agentId);
+        const data = await getAgentBalance(agentId, ownerAddress);
         if (isActive) onUpdateRef.current(data);
       } catch {
         // silent
@@ -40,7 +43,7 @@ function AgentCardBalancePoller({
       isActive = false;
       clearInterval(interval);
     };
-  }, [agentId]);
+  }, [agentId, ownerAddress]);
 
   return null;
 }
@@ -48,10 +51,12 @@ function AgentCardBalancePoller({
 interface AgentDashboardPageProps {
   agents: Agent[];
   onUpdateAgent?: (id: string, updates: Partial<Agent>) => void;
+  walletAddress: string | null;
 }
 
 export default function AgentDashboardPage({
   agents,
+  walletAddress,
 }: AgentDashboardPageProps) {
   const navigate = useNavigate();
 
@@ -63,13 +68,14 @@ export default function AgentDashboardPage({
   >({});
 
   const fetchStreams = useCallback(async (agentId: string) => {
+    if (!walletAddress) return;
     try {
-      const data = await listAgentStreams(agentId);
+      const data = await listAgentStreams(agentId, walletAddress);
       setAgentStreams((prev) => ({ ...prev, [agentId]: data.streams }));
     } catch {
       // silent
     }
-  }, []);
+  }, [walletAddress]);
 
   useEffect(() => {
     agents.forEach((a) => fetchStreams(a.id));
@@ -192,6 +198,7 @@ export default function AgentDashboardPage({
               >
                 <AgentCardBalancePoller
                   agentId={agent.id}
+                  ownerAddress={walletAddress}
                   onBalanceUpdate={(b) =>
                     setAgentBalances((prev) => ({ ...prev, [agent.id]: b }))
                   }

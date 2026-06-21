@@ -74,7 +74,7 @@ export async function getAllAgents(ownerAddress?: string): Promise<any[]> {
   if (ownerAddress) {
     rows = await sql`
       SELECT * FROM agents
-      WHERE owner_address = ${ownerAddress} OR owner_address IS NULL
+      WHERE owner_address = ${ownerAddress}
       ORDER BY created_at DESC
     `;
   } else {

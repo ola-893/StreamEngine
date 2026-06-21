@@ -57,9 +57,11 @@ function formatDuration(totalSec: number): string {
 
 function AgentBalancePoller({
   agentId,
+  ownerAddress,
   onBalanceUpdate,
 }: {
   agentId: string;
+  ownerAddress: string | null;
   onBalanceUpdate: (balance: AgentBalance) => void;
 }) {
   const onUpdateRef = React.useRef(onBalanceUpdate);
@@ -71,8 +73,9 @@ function AgentBalancePoller({
     let isActive = true;
 
     const poll = async () => {
+      if (!ownerAddress) return;
       try {
-        const data = await getAgentBalance(agentId);
+        const data = await getAgentBalance(agentId, ownerAddress);
         if (isActive) {
           onUpdateRef.current(data);
         }
@@ -87,7 +90,7 @@ function AgentBalancePoller({
       isActive = false;
       clearInterval(interval);
     };
-  }, [agentId]);
+  }, [agentId, ownerAddress]);
 
   return null;
 }
@@ -168,6 +171,13 @@ export default function AgentDetailPage({
   // Activity log
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
 
+  const requireWalletAddress = () => {
+    if (!walletAddress) {
+      throw new Error("Connect your wallet first — owner address is required");
+    }
+    return walletAddress;
+  };
+
   const addLogEntry = (entry: Omit<ActivityLogEntry, "id" | "timestamp">) => {
     setActivityLog((prev) => [
       {
@@ -181,12 +191,13 @@ export default function AgentDetailPage({
 
   const fetchStreams = useCallback(async (id: string) => {
     try {
-      const data = await listAgentStreams(id);
+      if (!walletAddress) return;
+      const data = await listAgentStreams(id, walletAddress);
       setStreams(data.streams);
     } catch {
       // silent
     }
-  }, []);
+  }, [walletAddress]);
 
   useEffect(() => {
     if (agentId) {
@@ -249,7 +260,8 @@ export default function AgentDetailPage({
     setDiscoveryLoading(true);
     setDiscoveryError(null);
     try {
-      const result = await discoverProviders(agent.id);
+      const ownerAddress = requireWalletAddress();
+      const result = await discoverProviders(agent.id, ownerAddress);
       setDiscoveryResults(result.recommendations);
       addLogEntry({
         agentId: agent.id,
@@ -275,6 +287,7 @@ export default function AgentDetailPage({
     setLoadingAction("start");
     setActionError(null);
     try {
+      const ownerAddress = requireWalletAddress();
       addLogEntry({
         agentId: agent.id,
         agentName,
@@ -282,10 +295,10 @@ export default function AgentDetailPage({
         title: "Starting agent...",
         detail: `Requesting stream for ${agentName} (${durationSeconds ? `${durationSeconds}s` : 'default'} duration)`,
       });
-      const result = await startAgent(agent.id, durationSeconds);
+      const result = await startAgent(agent.id, durationSeconds, ownerAddress);
       if (result.started) {
         await fetchStreams(agent.id);
-        const b = await getAgentBalance(agent.id);
+        const b = await getAgentBalance(agent.id, ownerAddress);
         setBalance(b);
         onUpdateAgent(agent.id, {});
         addLogEntry({
@@ -342,6 +355,7 @@ export default function AgentDetailPage({
     setLoadingAction("fund");
     setActionError(null);
     try {
+      const ownerAddress = requireWalletAddress();
       const amountMist = Math.floor(fundAmountSui * 1_000_000_000);
       addLogEntry({
         agentId: agent.id,
@@ -350,9 +364,9 @@ export default function AgentDetailPage({
         title: `Funding ${fundAmountSui} SUI...`,
         detail: "Depositing to agent wallet",
       });
-      const result = await fundAgent(agent.id, amountMist);
+      const result = await fundAgent(agent.id, amountMist, ownerAddress);
       if (result.success) {
-        const b = await getAgentBalance(agent.id);
+        const b = await getAgentBalance(agent.id, ownerAddress);
         setBalance(b);
         onUpdateAgent(agent.id, {});
         setFundModalOpen(false);
@@ -410,6 +424,7 @@ export default function AgentDetailPage({
     setLoadingAction(`close-${streamId}`);
     setActionError(null);
     try {
+      const ownerAddress = requireWalletAddress();
       addLogEntry({
         agentId: agent.id,
         agentName,
@@ -417,9 +432,9 @@ export default function AgentDetailPage({
         title: "Closing stream...",
         detail: `Stream ${streamId.substring(0, 12)}…`,
       });
-      const result = await closeAgentStream(agent.id, streamId);
+      const result = await closeAgentStream(agent.id, streamId, ownerAddress);
       await fetchStreams(agent.id);
-      const b = await getAgentBalance(agent.id);
+      const b = await getAgentBalance(agent.id, ownerAddress);
       setBalance(b);
       addLogEntry({
         agentId: agent.id,
@@ -457,19 +472,17 @@ export default function AgentDetailPage({
     setLoadingAction("withdraw");
     setActionError(null);
     try {
-      if (!walletAddress) {
-        throw new Error("Connect your wallet first — owner address is required");
-      }
+      const ownerAddress = requireWalletAddress();
       addLogEntry({
         agentId: agent.id,
         agentName,
         type: "stream",
         title: "Withdrawing SUI...",
-        detail: `Transferring remaining balance to ${walletAddress.substring(0, 10)}…`,
+        detail: `Transferring remaining balance to ${ownerAddress.substring(0, 10)}…`,
       });
-      const result = await withdrawAgent(agent.id, walletAddress);
+      const result = await withdrawAgent(agent.id, ownerAddress);
       if (result.success) {
-        const b = await getAgentBalance(agent.id);
+        const b = await getAgentBalance(agent.id, ownerAddress);
         setBalance(b);
         onUpdateAgent(agent.id, {});
         setWithdrawModalOpen(false);
@@ -514,7 +527,8 @@ export default function AgentDetailPage({
   const handleRefreshBalance = async () => {
     setLoadingAction("refresh");
     try {
-      const b = await getAgentBalance(agent.id);
+      const ownerAddress = requireWalletAddress();
+      const b = await getAgentBalance(agent.id, ownerAddress);
       setBalance(b);
       addToast({
         variant: "success",
@@ -535,7 +549,8 @@ export default function AgentDetailPage({
     setLoadingAction("delete");
     setActionError(null);
     try {
-      await deleteAgent(agent.id);
+      const ownerAddress = requireWalletAddress();
+      await deleteAgent(agent.id, ownerAddress);
       onDeleteAgent(agent.id);
       addToast({
         variant: "success",
@@ -564,6 +579,7 @@ export default function AgentDetailPage({
       {/* Balance Poller */}
       <AgentBalancePoller
         agentId={agent.id}
+        ownerAddress={walletAddress}
         onBalanceUpdate={(b) => setBalance(b)}
       />
 
@@ -704,6 +720,7 @@ export default function AgentDetailPage({
                       <StreamingSessionPanel
                         key={stream.streamId}
                         agentId={agent.id}
+                        ownerAddress={walletAddress}
                         streamId={stream.streamId}
                         providerName={providerNameForEndpoint(stream.endpoint)}
                         onClose={() => handleCloseStream(stream.streamId)}

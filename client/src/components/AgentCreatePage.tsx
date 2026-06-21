@@ -65,7 +65,7 @@ export default function AgentCreatePage({
   };
 
   const handleDeploy = async () => {
-    if (!isWalletConnected) return;
+    if (!isWalletConnected || !walletAddress) return;
     setDeployError("");
     try {
       const res = await fetch(`${API_BASE}/api/agents`, {

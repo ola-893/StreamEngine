@@ -104,14 +104,45 @@ function toPublicAgent(agent: any) {
   return publicAgent;
 }
 
+function getOwnerAddress(req: express.Request): string | null {
+  const value =
+    req.query.ownerAddress ??
+    req.body?.ownerAddress ??
+    req.headers['x-owner-address'];
+
+  if (Array.isArray(value)) return value[0]?.trim() || null;
+  if (typeof value === 'string') return value.trim() || null;
+  return null;
+}
+
+function ownsAgent(agent: Agent, ownerAddress: string): boolean {
+  return !!agent.ownerAddress && agent.ownerAddress === ownerAddress;
+}
+
+async function getOwnedAgent(req: express.Request, res: express.Response): Promise<{ agent: Agent; ownerAddress: string } | null> {
+  const ownerAddress = getOwnerAddress(req);
+  if (!ownerAddress) {
+    res.status(400).json({ error: 'ownerAddress required' });
+    return null;
+  }
+
+  const agent = await getAgent(req.params.id);
+  if (!agent || !ownsAgent(agent, ownerAddress)) {
+    res.status(404).json({ error: 'Agent not found' });
+    return null;
+  }
+
+  return { agent, ownerAddress };
+}
+
 // ============================================================
 //  AGENTS API
 // ============================================================
 
 app.post('/api/agents', async (req, res) => {
   const { name, description, purpose, budgetMist, ownerAddress } = req.body;
-  if (!name || !purpose || budgetMist === undefined) {
-    return res.status(400).json({ error: 'Missing required fields: name, purpose, budgetMist' });
+  if (!name || !purpose || budgetMist === undefined || !ownerAddress) {
+    return res.status(400).json({ error: 'Missing required fields: name, purpose, budgetMist, ownerAddress' });
   }
 
   const { address, privateKeyBech32 } = generateAgentWallet();
@@ -138,14 +169,18 @@ app.post('/api/agents', async (req, res) => {
 
 app.get('/api/agents', async (req, res) => {
   const { ownerAddress } = req.query;
-  const agents = await getAllAgents(typeof ownerAddress === 'string' ? ownerAddress : undefined);
+  if (typeof ownerAddress !== 'string' || !ownerAddress.trim()) {
+    return res.status(400).json({ error: 'ownerAddress required' });
+  }
+  const agents = await getAllAgents(ownerAddress.trim());
   res.json(agents.map(toPublicAgent));
 });
 
 app.delete('/api/agents/:id', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent } = owned;
 
     const deleted = await dbDeleteAgent(req.params.id);
     if (deleted) {
@@ -161,10 +196,10 @@ app.delete('/api/agents/:id', async (req, res) => {
 
 app.get('/api/agents/:id', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
-    
-    res.json(toPublicAgent(agent));
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+
+    res.json(toPublicAgent(owned.agent));
   } catch (error: any) {
     console.error('[agents/:id] Error:', error?.message || error);
     res.status(500).json({ error: 'Internal server error', message: error?.message || String(error) });
@@ -173,8 +208,9 @@ app.get('/api/agents/:id', async (req, res) => {
 
 app.get('/api/agents/:id/balance', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent } = owned;
 
     const coins = await suiClient.getCoins({
       owner: agent.walletAddress,
@@ -200,8 +236,9 @@ app.get('/api/agents/:id/balance', async (req, res) => {
 
 app.post('/api/agents/:id/access', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent } = owned;
 
     const { endpoint, durationSeconds } = req.body;
     if (!endpoint) return res.status(400).json({ error: 'endpoint required' });
@@ -315,8 +352,9 @@ app.post('/api/agents/:id/access', async (req, res) => {
 
 app.get('/api/agents/:id/streams', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent } = owned;
 
     const streamsWithBalance = await Promise.all(
       agent.activeStreams.map(async (stream: AgentStream) => {
@@ -343,8 +381,9 @@ app.get('/api/agents/:id/streams', async (req, res) => {
 
 app.delete('/api/agents/:id/streams/:streamId', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent } = owned;
 
     const { streamId } = req.params;
     const streamRecord = agent.activeStreams.find((s: AgentStream) => s.streamId === streamId);
@@ -380,8 +419,9 @@ app.delete('/api/agents/:id/streams/:streamId', async (req, res) => {
 
 app.post('/api/agents/:id/start', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent, ownerAddress } = owned;
 
     console.log(`[start] ▶ Starting agent "${agent.name}" (${agent.id}) — purpose: ${agent.purpose}`);
 
@@ -431,7 +471,7 @@ app.post('/api/agents/:id/start', async (req, res) => {
     const accessRes = await fetch(`http://localhost:${PORT}/api/agents/${agent.id}/access`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ endpoint: matchedProvider.endpoint, durationSeconds: streamDurationStart }),
+      body: JSON.stringify({ endpoint: matchedProvider.endpoint, durationSeconds: streamDurationStart, ownerAddress }),
     });
     const accessData = await accessRes.json();
 
@@ -551,8 +591,9 @@ function scoreProvider(provider: any, agentPurpose: string, balanceMist: number)
  */
 app.post('/api/agents/:id/discover', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent } = owned;
 
     console.log(`[discover] Agent "${agent.name}" (${agent.id}) scanning marketplace — purpose: ${agent.purpose}`);
 
@@ -616,8 +657,9 @@ app.post('/api/agents/:id/discover', async (req, res) => {
 
 app.get('/api/agents/:id/streams/:streamId/state', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent } = owned;
 
     const stream = agent.activeStreams.find((s: AgentStream) => s.streamId === req.params.streamId);
     if (!stream) return res.status(404).json({ error: 'Stream not found on agent' });
@@ -679,8 +721,9 @@ app.get('/api/agents/:id/streams/:streamId/state', async (req, res) => {
 
 app.post('/api/agents/:id/streams/:streamId/fetch-data', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent } = owned;
 
     const stream = agent.activeStreams.find((s: AgentStream) => s.streamId === req.params.streamId);
     if (!stream) return res.status(404).json({ error: 'Stream not found on agent' });
@@ -733,16 +776,9 @@ app.post('/api/agents/:id/streams/:streamId/fetch-data', async (req, res) => {
 
 app.post('/api/agents/:id/withdraw', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
-
-    const { ownerAddress } = req.body;
-    if (!ownerAddress) return res.status(400).json({ error: 'ownerAddress required — pass your wallet address' });
-
-    // Verify the caller owns this agent
-    if (agent.ownerAddress && agent.ownerAddress !== ownerAddress) {
-      return res.status(403).json({ error: 'Not authorized — owner address mismatch' });
-    }
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent, ownerAddress } = owned;
 
     console.log(`[withdraw] Agent "${agent.name}" (${agent.id}) — withdrawing to ${ownerAddress}`);
 
@@ -808,8 +844,9 @@ app.post('/api/agents/:id/withdraw', async (req, res) => {
 
 app.post('/api/agents/:id/fund-demo', async (req, res) => {
   try {
-    const agent = await getAgent(req.params.id);
-    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    const owned = await getOwnedAgent(req, res);
+    if (!owned) return;
+    const { agent } = owned;
     
     const { amountMist } = req.body;
     if (!amountMist) return res.status(400).json({ error: 'Missing amountMist' });

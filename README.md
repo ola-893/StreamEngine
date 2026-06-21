@@ -49,7 +49,7 @@ const data = await agent.makeRequest('https://yourservice.com/premium/feed');
 ```
 [AI Agent]
    |
-   |-- POST /api/agents -> FlowGate creates agent wallet (Ed25519 keypair)
+   |-- POST /api/agents { ownerAddress } -> FlowGate creates an owner-scoped agent wallet
    |
    |-- Hits service endpoint -> 402 Payment Required
    |
@@ -61,6 +61,10 @@ const data = await agent.makeRequest('https://yourservice.com/premium/feed');
    |-- Balance = 0 -> 402 again, access revoked
 ```
 
+## Agent Owner Isolation
+
+Each connected wallet registers and controls its own independent agent. Agent records, balances, streams, and controls are scoped by `ownerAddress`; one visitor cannot list, inspect, start, stop, fund, withdraw from, or delete another wallet's agent.
+
 ## Why Sui
 
 - Sub-second finality (~400ms) - real-time stream verification
@@ -71,7 +75,7 @@ const data = await agent.makeRequest('https://yourservice.com/premium/feed');
 ## Deployed Contract
 
 ```
-Package: 0x985b39944036d55e88cde8d282893389996084a75e46fcb3eb26f1343e8d5549
+Package: 0xb05b3964df8b88a86cda6b192893399966014af9dd6fc6beb26f1343a0495495
 Network: Sui Testnet
 Module:  stream_engine::stream
 ```

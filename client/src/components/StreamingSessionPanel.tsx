@@ -26,6 +26,7 @@ interface ScrapedItem {
 
 interface StreamingSessionPanelProps {
   agentId: string;
+  ownerAddress: string | null;
   streamId: string;
   providerName: string;
   onClose?: () => void;
@@ -54,6 +55,7 @@ function formatTime(iso: string): string {
 
 export default function StreamingSessionPanel({
   agentId,
+  ownerAddress,
   streamId,
   providerName,
   onClose,
@@ -68,8 +70,9 @@ export default function StreamingSessionPanel({
 
   // Poll stream state every 5 seconds
   const pollState = useCallback(async () => {
+    if (!ownerAddress) return;
     try {
-      const state = await getStreamState(agentId, streamId);
+      const state = await getStreamState(agentId, streamId, ownerAddress);
       setStreamState(state);
       onStatusChange?.(streamId, state.status);
       // Cap elapsed so pollState doesn't overshoot past totalDurationSec
@@ -80,7 +83,7 @@ export default function StreamingSessionPanel({
     } catch {
       // silent
     }
-  }, [agentId, streamId]);
+  }, [agentId, ownerAddress, streamId]);
 
   useEffect(() => {
     pollState();
@@ -102,9 +105,17 @@ export default function StreamingSessionPanel({
   }, [streamState?.elapsedSec, streamState?.status, streamState?.totalDurationSec]);
 
   const handleFetchData = async () => {
+    if (!ownerAddress) {
+      addToast({
+        variant: "error",
+        title: "Wallet required",
+        message: "Connect your wallet to fetch stream data.",
+      });
+      return;
+    }
     setIsFetching(true);
     try {
-      const result = await fetchStreamData(agentId, streamId);
+      const result = await fetchStreamData(agentId, streamId, ownerAddress);
 
       let preview = "";
       let itemCount = 0;
