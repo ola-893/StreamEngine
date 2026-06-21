@@ -80,7 +80,10 @@ async function runTest() {
   try {
     // --- Step 1: Wallet Setup ---
     console.log("[Step 1] Loading pre-funded agent wallet...");
-    const bech32Key = "suiprivkey1qp5z0u5x72yvjmwulrltg2nzwk6xddk2cqxcy736ydytrmnyns4rsugn8zz";
+    if (!process.env.SUI_PRIVATE_KEY) {
+      throw new Error("SUI_PRIVATE_KEY must be set to run the integration test");
+    }
+    const bech32Key = process.env.SUI_PRIVATE_KEY;
     const { secretKey } = decodeSuiPrivateKey(bech32Key);
     const agentKeypair = Ed25519Keypair.fromSecretKey(secretKey);
     const agentAddress = agentKeypair.toSuiAddress();

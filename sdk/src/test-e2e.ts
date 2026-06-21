@@ -43,7 +43,10 @@ async function runE2E() {
 
     // --- Step 2: Initialize Agent SDK ---
     console.log("\n[Step 2] Initializing agent wallet & SDK...");
-    const bech32Key = "suiprivkey1qp5z0u5x72yvjmwulrltg2nzwk6xddk2cqxcy736ydytrmnyns4rsugn8zz";
+    if (!process.env.SUI_PRIVATE_KEY) {
+        throw new Error("SUI_PRIVATE_KEY must be set to run the e2e test");
+    }
+    const bech32Key = process.env.SUI_PRIVATE_KEY;
     const { secretKey } = decodeSuiPrivateKey(bech32Key);
 
     const sdk = new SuiDataGateSDK({
@@ -108,7 +111,23 @@ async function runE2E() {
 
     // --- Step 6: Make another request using existing stream → should succeed ---
     console.log("\n[Step 6] Making second request using existing stream...");
-    const response2 = await sdk.makeRequest(targetEndpoint);
+    // Small delay to let Node.js connection pool stabilize after the stream creation cycle
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    let response2;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            response2 = await sdk.makeRequest(targetEndpoint);
+            break;
+        } catch (e: any) {
+            if (attempt < 3 && (e.message?.includes('AggregateError') || e.code === 'ECONNRESET' || e.code === 'ECONNREFUSED')) {
+                console.log(`  ⚠️ Connection error (attempt ${attempt}/3), retrying in 2s...`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                continue;
+            }
+            throw e;
+        }
+    }
+    if (!response2) throw new Error('Failed to make second request after 3 attempts');
     console.log(`  ✅ Data received again (stream reused, no new PTB needed)`);
     console.log(`     Scraped at: ${response2.data.scrapedAt}`);
 

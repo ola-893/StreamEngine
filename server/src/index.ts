@@ -11,8 +11,10 @@ import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
 import { verifyPersonalMessageSignature } from '@mysten/sui/verify';
 import { PACKAGE_ID } from './x402/middleware.ts';
 
-// Use a real secret in production. For the hackathon demo, this is fine.
-const ENCRYPTION_SECRET = (process.env.AGENT_WALLET_ENCRYPTION_KEY || 'streamengine-hackathon-secret!!').padEnd(32).slice(0, 32);
+if (!process.env.AGENT_KEY_SECRET) {
+  throw new Error('AGENT_KEY_SECRET must be set — refusing to start with no encryption key');
+}
+const ENCRYPTION_SECRET = process.env.AGENT_KEY_SECRET.padEnd(32).slice(0, 32);
 
 function generateAgentWallet(): { address: string; privateKeyBech32: string } {
   const keypair = new Ed25519Keypair();
@@ -690,10 +692,19 @@ app.post('/api/agents/:id/fund-demo', async (req, res) => {
     const { amountMist } = req.body;
     if (!amountMist) return res.status(400).json({ error: 'Missing amountMist' });
 
-    // Use a test wallet to fund the agent
-    const testPrivateKeyHex = process.env.SUI_PRIVATE_KEY || 'e6027c95a2858b99c7162985fde44cd8b898a39a671f657a731dfeddae11aeb2'; // 32-byte hex for a dummy wallet that has SUI
-    const cleanHex = testPrivateKeyHex.startsWith('0x') ? testPrivateKeyHex.slice(2) : testPrivateKeyHex;
-    const testWalletKeypair = Ed25519Keypair.fromSecretKey(Buffer.from(cleanHex, 'hex'));
+    if (!process.env.SUI_PRIVATE_KEY) {
+      throw new Error('SUI_PRIVATE_KEY must be set — fund-demo endpoint cannot run without it');
+    }
+    const testBech32Key = process.env.SUI_PRIVATE_KEY;
+    let testWalletKeypair: Ed25519Keypair;
+    if (testBech32Key.startsWith('suiprivkey')) {
+      const { secretKey } = decodeSuiPrivateKey(testBech32Key);
+      testWalletKeypair = Ed25519Keypair.fromSecretKey(secretKey);
+    } else {
+      const cleanHex = testBech32Key.startsWith('0x') ? testBech32Key.slice(2) : testBech32Key;
+      testWalletKeypair = Ed25519Keypair.fromSecretKey(Buffer.from(cleanHex, 'hex'));
+    }
+    console.log(`[fund-demo] Test wallet address: ${testWalletKeypair.toSuiAddress()}`);
 
     const { Transaction } = await import('@mysten/sui/transactions');
     const tx = new Transaction();
