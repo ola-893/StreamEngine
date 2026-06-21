@@ -37,6 +37,15 @@ npm-debug.log*
 coverage/
 .nyc_output/
 
+# Local demo artifacts
+client/test-ui.cjs
+dom_snapshot_verification.html
+e2e_log.txt
+server/server_log.txt
+server/src/rewrite_index.py
+server/test-balance.ts
+server/test-faucet.ts
+
 # Misc
 *.tgz
 .cache/
