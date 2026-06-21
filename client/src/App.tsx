@@ -290,19 +290,19 @@ export default function App() {
         h-full md:h-screen md:top-0 overflow-y-auto
       `}>
         <div className="flex flex-col gap-6">
-          {/* Brand */}
-          <div className="flex items-center justify-between pb-4 border-b border-stone-200">
-            <div className="flex flex-col">
-              <span className="font-sans font-bold text-xl text-[#1C1A17]">Flowgate</span>
-              <span className="text-[10px] font-sans text-[#7C7567]">Node Workspace v0.16</span>
+          {/* Brand */}            <div className="flex items-center gap-3 pb-4 border-b border-stone-200">
+              <img src="/logo.svg" alt="FlowGate" className="w-9 h-9" />
+              <div className="flex flex-col">
+                <span className="font-sans font-bold text-xl text-[#1C1A17]">Flowgate</span>
+                <span className="text-[10px] font-sans text-[#7C7567]">Node Workspace v0.16</span>
+              </div>
+              <button
+                onClick={() => { navigate("/"); setMobileMenuOpen(false); }}
+                className="ml-auto px-3 py-1.5 text-[10px] font-mono border border-stone-300 bg-[#FAF9F5] hover:border-[#1C1A17] hover:bg-[#1C1A17]/5 uppercase transition-all rounded-full shadow-sm cursor-pointer"
+              >
+                Home
+              </button>
             </div>
-            <button
-              onClick={() => { navigate("/"); setMobileMenuOpen(false); }}
-              className="px-3 py-1.5 text-[10px] font-mono border border-stone-300 bg-[#FAF9F5] hover:border-[#1C1A17] hover:bg-[#1C1A17]/5 uppercase transition-all rounded-full shadow-sm cursor-pointer"
-            >
-              Home
-            </button>
-          </div>
 
           {/* Wallet Card */}
           <div className="p-4 bg-[#FAF9F5] border border-stone-200/80">

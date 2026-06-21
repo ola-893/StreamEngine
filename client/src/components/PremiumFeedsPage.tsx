@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
@@ -12,6 +12,7 @@ import {
   X,
   Rss,
   Plus,
+  Database,
 } from "lucide-react";
 
 interface PremiumFeed {
@@ -21,34 +22,31 @@ interface PremiumFeed {
   endpoint: string;
   description: string;
   icon: string;
+  category: string;
+  ratePerSecond: number;
 }
 
-const PREMIUM_FEEDS: PremiumFeed[] = [
-  {
-    id: "x-social",
-    name: "X (Twitter) Feed",
-    provider: "X (Twitter)",
-    endpoint: "/api/premium/x-social/feed",
-    description: "Real-time posts, trending topics, and human interactions from X.com",
-    icon: "𝕏",
-  },
-  {
-    id: "reddit",
-    name: "Reddit Feed",
-    provider: "Reddit",
-    endpoint: "/api/premium/reddit/feed",
-    description: "Upvoted threads, community discussions, and niche subreddit data",
-    icon: "r/",
-  },
-  {
-    id: "bloomberg",
-    name: "Bloomberg Feed",
-    provider: "Bloomberg",
-    endpoint: "/api/premium/bloomberg/feed",
-    description: "Proprietary financial news, earnings call transcripts, and market commentary",
-    icon: "B%",
-  },
-];
+const CATEGORY_ICONS: Record<string, string> = {
+  'Data Feed': '📊',
+  'Social Media': '💬',
+  'Finance': '📈',
+  'Compute': '⚡',
+  'API': '🔗',
+  'General': '📦',
+};
+
+function providerToFeed(p: any): PremiumFeed {
+  return {
+    id: p.id,
+    name: p.name,
+    provider: p.name,
+    endpoint: p.endpoint,
+    description: p.description || `${p.name} — ${((p.ratePerSecond ?? 100_000) / 1_000_000_000).toFixed(6)} SUI/sec`,
+    icon: CATEGORY_ICONS[p.category] || '📦',
+    category: p.category || 'General',
+    ratePerSecond: p.ratePerSecond,
+  };
+}
 
 interface PaymentRequired {
   provider: string;
@@ -75,7 +73,25 @@ export default function PremiumFeedsPage() {
   const dAppKit = useDAppKit();
   const { addToast } = useToast();
 
+  const [feeds, setFeeds] = useState<PremiumFeed[]>([]);
+  const [feedsLoading, setFeedsLoading] = useState(true);
   const [feedStates, setFeedStates] = useState<Record<string, FeedState>>({});
+
+  const fetchFeeds = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/providers`);
+      const data = await res.json();
+      setFeeds((data.providers || []).map(providerToFeed));
+    } catch {
+      setFeeds([]);
+    } finally {
+      setFeedsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFeeds();
+  }, [fetchFeeds]);
 
   const updateFeedState = (feedId: string, state: Partial<FeedState>) => {
     setFeedStates((prev) => ({ ...prev, [feedId]: { ...prev[feedId], ...state } }));
@@ -343,9 +359,22 @@ export default function PremiumFeedsPage() {
       </div>
 
       {/* Feed cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {PREMIUM_FEEDS.map(renderFeedCard)}
-      </div>
+      {feedsLoading ? (
+        <div className="flex items-center justify-center py-12 gap-3 text-sm font-sans text-stone-400">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Loading marketplace feeds...
+        </div>
+      ) : feeds.length === 0 ? (
+        <div className="p-12 text-center">
+          <Database className="w-10 h-10 text-stone-200 mx-auto mb-3" />
+          <p className="text-sm font-sans font-bold text-[#1C1A17]">No providers registered yet</p>
+          <p className="text-xs text-stone-400 mt-1">Register an endpoint to see it here.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {feeds.map(renderFeedCard)}
+        </div>
+      )}
     </div>
   );
 }

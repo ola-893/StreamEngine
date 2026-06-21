@@ -48,9 +48,7 @@ export default function LandingPage({
       {/* TOP BAR */}
       <header className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between relative z-50">
         <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate("/")}>
-          <div className="flex items-center gap-1 bg-[#1C1A17] text-[#E5E5ED] p-2 leading-none font-black text-sm tracking-tighter">
-            <span>Σ</span><span>N</span>
-          </div>
+          <img src="/logo.svg" alt="FlowGate" className="w-8 h-8" />
           <span className="font-mono text-xs tracking-widest font-black uppercase">FLOWGATE</span>
         </div>
 
