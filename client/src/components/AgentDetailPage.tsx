@@ -155,8 +155,14 @@ export default function AgentDetailPage({
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   // Activity log
-  // Stream filter
-  const [streamFilter, setStreamFilter] = useState<"active" | "finished">("active");
+  // Stream filter + pagination
+  const [streamFilter, setStreamFilter] = useState<"all" | "active" | "finished">("all");
+  const [streamPage, setStreamPage] = useState(1);
+  const STREAMS_PER_PAGE = 5;
+
+  // Activity log pagination
+  const [activityPage, setActivityPage] = useState(1);
+  const ACTIVITY_PER_PAGE = 8;
   const [streamStatuses, setStreamStatuses] = useState<Record<string, "streaming" | "depleted">>({});
 
   // Activity log
@@ -635,25 +641,32 @@ export default function AgentDetailPage({
                 <span className="text-xs font-sans text-stone-400 font-medium">Live Operation</span>
               </div>
               <div className="flex items-center gap-1">
-                {(["active", "finished"] as const).map((filter) => {
-                  const count = streams.filter((s) => {
-                    const st = streamStatuses[s.streamId];
-                    return filter === "active" ? st !== "depleted" : st === "depleted";
-                  }).length;
+                {([
+                  { key: 'all' as const, label: 'All' },
+                  { key: 'active' as const, label: 'Active' },
+                  { key: 'finished' as const, label: 'Done' },
+                ]).map(({ key, label }) => {
+                  const count = key === 'all'
+                    ? streams.length
+                    : streams.filter((s) => {
+                        const st = streamStatuses[s.streamId];
+                        return key === 'active' ? st !== 'depleted' : st === 'depleted';
+                      }).length;
                   return (
                     <button
-                      key={filter}
-                      onClick={() => setStreamFilter(filter)}
-                      className={`px-2.5 py-1 text-[10px] font-sans font-bold rounded-full border transition-all ${
-                        streamFilter === filter
-                          ? filter === "active"
-                            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                            : "border-stone-300 bg-stone-100 text-stone-600"
-                          : "border-transparent text-stone-400 hover:text-stone-600"
+                      key={key}
+                      onClick={() => { setStreamFilter(key); setStreamPage(1); }}
+                      className={`px-2.5 py-1 text-[10px] font-sans font-bold rounded-md transition-all ${
+                        streamFilter === key
+                          ? key === 'active'
+                            ? 'bg-emerald-50 text-emerald-700 shadow-sm'
+                            : key === 'finished'
+                              ? 'bg-stone-100 text-stone-600 shadow-sm'
+                              : 'bg-white text-[#1C1A17] shadow-sm'
+                          : 'text-stone-400 hover:text-stone-600'
                       }`}
                     >
-                      {filter === "active" ? "Active" : "Finished"}
-                      <span className="ml-1 font-mono">{count}</span>
+                      {label} <span className="opacity-60">{count}</span>
                     </button>
                   );
                 })}
@@ -662,6 +675,7 @@ export default function AgentDetailPage({
             {(() => {
               const filteredStreams = streams.filter((s) => {
                 const st = streamStatuses[s.streamId];
+                if (streamFilter === 'all') return true;
                 return streamFilter === "active" ? st !== "depleted" : st === "depleted";
               });
               if (streams.length === 0) {
@@ -677,24 +691,35 @@ export default function AgentDetailPage({
                 return (
                   <div className="p-6 bg-[#FAF9F6] border border-stone-200 rounded-lg text-center">
                     <p className="text-xs font-sans text-stone-400">
-                      No {streamFilter === "active" ? "active" : "finished"} streams yet.
+                      No {streamFilter === 'all' ? '' : streamFilter === "active" ? "active" : "finished"} streams yet.
                     </p>
                   </div>
                 );
               }
+              const shownStreams = filteredStreams.slice(0, streamPage * STREAMS_PER_PAGE);
               return (
-                <div className="space-y-4">
-                  {filteredStreams.map((stream) => (
-                    <StreamingSessionPanel
-                      key={stream.streamId}
-                      agentId={agent.id}
-                      streamId={stream.streamId}
-                      providerName={providerNameForEndpoint(stream.endpoint)}
-                      onClose={() => handleCloseStream(stream.streamId)}
-                      onStatusChange={(sid, status) => setStreamStatuses((prev) => ({ ...prev, [sid]: status }))}
-                    />
-                  ))}
-                </div>
+                <>
+                  <div className="space-y-4">
+                    {shownStreams.map((stream) => (
+                      <StreamingSessionPanel
+                        key={stream.streamId}
+                        agentId={agent.id}
+                        streamId={stream.streamId}
+                        providerName={providerNameForEndpoint(stream.endpoint)}
+                        onClose={() => handleCloseStream(stream.streamId)}
+                        onStatusChange={(sid, status) => setStreamStatuses((prev) => ({ ...prev, [sid]: status }))}
+                      />
+                    ))}
+                  </div>
+                  {filteredStreams.length > shownStreams.length && (
+                    <button
+                      onClick={() => setStreamPage((p) => p + 1)}
+                      className="w-full mt-3 py-2 text-[10px] font-sans font-bold text-stone-400 hover:text-[#8C2C16] bg-[#FAF9F6] border border-stone-200 rounded-lg hover:border-[#8C2C16] transition-all"
+                    >
+                      Show more ({filteredStreams.length - shownStreams.length} remaining)
+                    </button>
+                  )}
+                </>
               );
             })()}
           </section>
@@ -708,9 +733,8 @@ export default function AgentDetailPage({
                   {activityLog.length}
                 </span>
               </div>
-              {activityLog.length > 0 && (
-                <button
-                  onClick={() => setActivityLog([])}
+              {activityLog.length > 0 && (                  <button
+                  onClick={() => { setActivityLog([]); setActivityPage(1); }}
                   className="text-[10px] font-sans text-stone-400 hover:text-stone-600 transition-colors"
                 >
                   clear
@@ -723,9 +747,10 @@ export default function AgentDetailPage({
                 <p className="text-xs text-stone-400 font-sans">No activity yet.</p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-80 overflow-y-auto">
-                {activityLog.map((entry) => (
-                  <div key={entry.id} className="grid grid-cols-[8px_minmax(0,1fr)_auto] gap-3 p-3 bg-white border border-stone-100 rounded-lg">
+              <>
+                <div className="space-y-2">
+                  {activityLog.slice(0, activityPage * ACTIVITY_PER_PAGE).map((entry) => (
+                    <div key={entry.id} className="grid grid-cols-[8px_minmax(0,1fr)_auto] gap-3 p-3 bg-white border border-stone-100 rounded-lg">
                     <div
                       className={`w-2 h-2 rounded-full mt-1.5 ${
                         entry.type === "error"
@@ -778,7 +803,16 @@ export default function AgentDetailPage({
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+                {activityLog.length > activityPage * ACTIVITY_PER_PAGE && (
+                  <button
+                    onClick={() => setActivityPage((p) => p + 1)}
+                    className="w-full mt-2 py-2 text-[10px] font-sans font-bold text-stone-400 hover:text-[#8C2C16] bg-white border border-stone-200 rounded-lg hover:border-[#8C2C16] transition-all"
+                  >
+                    Show more ({activityLog.length - activityPage * ACTIVITY_PER_PAGE} remaining)
+                  </button>
+                )}
+              </>
             )}
           </section>
 

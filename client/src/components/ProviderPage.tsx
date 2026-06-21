@@ -6,7 +6,7 @@ import { dAppKit } from "../dapp-kit-config";
 import { Endpoint, API_BASE, ProviderListing } from "../types";
 import {
   listProviders,
-  getProviderEarnings,
+
   getProviderConsumers,
   getProviderStreams,
   updateProvider,
@@ -230,7 +230,6 @@ export default function ProviderPage({
 
   // Detail view state
   const [consumers, setConsumers] = useState<ProviderConsumer[]>([]);
-  const [earnings, setEarnings] = useState<number>(0);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   // Provider streams (on-chain balance + claimable)
@@ -238,6 +237,15 @@ export default function ProviderPage({
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [withdrawingStreamId, setWithdrawingStreamId] = useState<string | null>(null);
   const [withdrawingAll, setWithdrawingAll] = useState(false);
+
+  // Pagination & filtering for Consuming Agents
+  const [consumerPage, setConsumerPage] = useState(1);
+  const [consumerFilter, setConsumerFilter] = useState<'all' | 'streaming' | 'depleted'>('all');
+  const CONSUMERS_PER_PAGE = 8;
+
+  // Pagination for Withdraw Earnings streams
+  const [streamPage, setStreamPage] = useState(1);
+  const STREAMS_PER_PAGE = 6;
 
 
   // Edit state
@@ -263,23 +271,30 @@ export default function ProviderPage({
     fetchProviders();
   }, [fetchProviders]);
 
-  // Fetch detail data when selecting a provider
+  // Fetch detail data when selecting a provider + poll every 8s for real-time updates
   useEffect(() => {
     if (!selectedId) {
-      setConsumers([]);
-      setEarnings(0);
-      setProviderStreams(null);
+  
       return;
     }
+    let isActive = true;
+    const fetchDetail = async () => {
+      try {
+        const [consumersData] = await Promise.all([
+          getProviderConsumers(selectedId).catch(() => ({ consumers: [] })),
+        ]);
+        if (isActive) {
+          setConsumers(consumersData.consumers);
+          setLoadingDetail(false);
+        }
+      } catch {
+        if (isActive) setLoadingDetail(false);
+      }
+    };
     setLoadingDetail(true);
-    Promise.all([
-      getProviderConsumers(selectedId).catch(() => ({ consumers: [] })),
-      getProviderEarnings(selectedId).catch(() => ({ totalEarnedMist: 0 })),
-    ]).then(([consumersData, earningsData]) => {
-      setConsumers(consumersData.consumers);
-      setEarnings(earningsData.totalEarnedMist);
-      setLoadingDetail(false);
-    });
+    fetchDetail();
+    const interval = setInterval(fetchDetail, 8000);
+    return () => { isActive = false; clearInterval(interval); };
   }, [selectedId]);
 
   // Fetch on-chain stream data for withdrawal
@@ -296,9 +311,22 @@ export default function ProviderPage({
     }
   }, [selectedId]);
 
+  // Poll on-chain stream balances every 10s for real-time withdrawal amounts
   useEffect(() => {
-    fetchProviderStreams();
-  }, [fetchProviderStreams]);
+    if (!selectedId) return;
+    let isActive = true;
+    const pollStreams = async () => {
+      try {
+        const data = await getProviderStreams(selectedId);
+        if (isActive) setProviderStreams(data);
+      } catch {
+        // silent — keep previous data
+      }
+    };
+    pollStreams();
+    const interval = setInterval(pollStreams, 10000);
+    return () => { isActive = false; clearInterval(interval); };
+  }, [selectedId]);
 
   // Withdraw from a single stream
   const handleWithdrawStream = async (stream: ProviderStream) => {
@@ -385,6 +413,9 @@ export default function ProviderPage({
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Reset pages when provider changes
+  useEffect(() => { setConsumerPage(1); setConsumerFilter('all'); setStreamPage(1); }, [selectedId]);
 
   const selectedProvider = providers.find((p) => p.id === selectedId);
 
@@ -483,14 +514,14 @@ export default function ProviderPage({
 
   // ─── Detail View ────────────────────────────────────────────────
   if (selectedProvider) {
-    const totalEarnedSui = earnings / 1_000_000_000;
-    const activeConsumers = consumers.filter((c) => c.status === "streaming");
-    const depletedConsumers = consumers.filter((c) => c.status === "depleted");
-    const totalRevenue = consumers.reduce(
-      (sum, c) => sum + c.depositMist * (c.status === "streaming" ? c.elapsedSec / Math.max(c.durationSeconds, 1) : 1),
+    // Calculate live earnings from consumer data instead of stored DB value
+    const liveTotalEarnedMist = consumers.reduce(
+      (sum, c) => sum + Math.min(c.elapsedSec, c.durationSeconds || c.elapsedSec) * c.ratePerSecondMist,
       0
     );
-
+    const totalEarnedSui = liveTotalEarnedMist / 1_000_000_000;
+    const activeConsumers = consumers.filter((c) => c.status === "streaming");
+    const depletedConsumers = consumers.filter((c) => c.status === "depleted");
     return (
       <div className="pb-16">
         {/* Breadcrumb */}
@@ -601,7 +632,7 @@ export default function ProviderPage({
 
         {/* Earnings Chart */}
         <div className="mb-6">
-          <EarningsChart consumers={consumers} totalEarnedMist={earnings} />
+          <EarningsChart consumers={consumers} totalEarnedMist={liveTotalEarnedMist} />
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
@@ -624,98 +655,158 @@ export default function ProviderPage({
                     {consumers.length}
                   </span>
                 </div>
+                {/* Status filter tabs */}
+                <div className="flex items-center gap-1 bg-stone-100 rounded-lg p-0.5">
+                  {([
+                    { key: 'all' as const, label: 'All', count: consumers.length },
+                    { key: 'streaming' as const, label: 'Active', count: activeConsumers.length },
+                    { key: 'depleted' as const, label: 'Done', count: depletedConsumers.length },
+                  ]).map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => { setConsumerFilter(tab.key); setConsumerPage(1); }}
+                      className={`px-2.5 py-1 text-[10px] font-sans font-bold rounded-md transition-all ${
+                        consumerFilter === tab.key
+                          ? 'bg-white text-[#1C1A17] shadow-sm'
+                          : 'text-stone-400 hover:text-stone-600'
+                      }`}
+                    >
+                      {tab.label}
+                      <span className="ml-1 opacity-60">{tab.count}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
               {loadingDetail ? (
                 <div className="p-8 bg-[#FAF9F6] border border-stone-200 rounded-lg animate-pulse">
                   <div className="h-16 bg-stone-100 rounded-lg" />
                 </div>
               ) : consumers.length > 0 ? (
-                <div className="space-y-3">
-                  {consumers.map((consumer) => (
-                    <div
-                      key={consumer.streamId}
-                      className="p-4 bg-[#FAF9F6] border border-stone-200 rounded-xl"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="relative shrink-0">
-                            <Radio
-                              className={`w-4 h-4 ${
-                                consumer.status === "streaming"
-                                  ? "text-emerald-500"
-                                  : "text-stone-400"
-                              }`}
-                            />
-                            {consumer.status === "streaming" && (
-                              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                            )}
-                          </div>
-                          <span className="font-sans text-sm font-bold text-[#1C1A17] truncate">
-                            {consumer.agentName}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 text-[10px] font-mono font-bold rounded-full shrink-0 ${
-                              consumer.status === "streaming"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : "bg-stone-100 text-stone-600 border border-stone-300"
-                            }`}
-                          >
-                            {consumer.status === "streaming"
-                              ? "ACTIVE"
-                              : "FINISHED"}
-                          </span>
-                          <span className="text-[10px] font-sans text-stone-400 px-1.5 py-0.5 bg-stone-100 rounded">
-                            {consumer.agentPurpose}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1 text-[#8C2C16] shrink-0">
-                          <Clock className="w-3 h-3" />
-                          <span className="text-[10px] font-mono font-bold">
-                            {formatDuration(consumer.elapsedSec)}
-                            {consumer.status === "streaming" &&
-                              ` / ${formatDuration(consumer.durationSeconds)}`}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-[10px] font-mono">
-                        <span className="text-stone-400">
-                          Rate:{" "}
-                          <span className="font-bold text-[#8C2C16]">
-                            {consumer.ratePerSecondMist.toLocaleString()} MIST/s
-                          </span>
-                        </span>
-                        <span className="text-stone-400">
-                          Deposit:{" "}
-                          <span className="font-bold text-[#1C1A17]">
-                            {(consumer.depositMist / 1_000_000_000).toFixed(4)}{" "}
-                            SUI
-                          </span>
-                        </span>
-                        <span className="text-stone-400">
-                          Stream:{" "}
-                          <a
-                            href={`https://suiscan.xyz/testnet/object/${consumer.streamId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[#8C2C16] hover:underline inline-flex items-center gap-0.5"
-                          >
-                            {consumer.streamId.substring(0, 12)}…
-                            <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        </span>
-                      </div>
+                <>
+                  {/* Compact table */}
+                  <div className="bg-[#FAF9F6] border border-stone-200 rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-stone-200 bg-stone-50">
+                            <th className="px-3 py-2 text-[10px] font-sans font-bold text-stone-400 uppercase tracking-wider">Agent</th>
+                            <th className="px-3 py-2 text-[10px] font-sans font-bold text-stone-400 uppercase tracking-wider">Status</th>
+                            <th className="px-3 py-2 text-[10px] font-sans font-bold text-stone-400 uppercase tracking-wider">Time</th>
+                            <th className="px-3 py-2 text-[10px] font-sans font-bold text-stone-400 uppercase tracking-wider">Rate</th>
+                            <th className="px-3 py-2 text-[10px] font-sans font-bold text-stone-400 uppercase tracking-wider">Deposit</th>
+                            <th className="px-3 py-2 text-[10px] font-sans font-bold text-stone-400 uppercase tracking-wider text-right">Stream</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(() => {
+                            const filtered = consumers.filter((c) => consumerFilter === 'all' || c.status === consumerFilter);
+                            const totalPages = Math.ceil(filtered.length / CONSUMERS_PER_PAGE);
+                            const pageItems = filtered.slice(0, consumerPage * CONSUMERS_PER_PAGE);
+                            return pageItems.map((consumer) => (
+                              <tr
+                                key={consumer.streamId}
+                                className="border-b border-stone-100 last:border-b-0 hover:bg-white transition-colors"
+                              >
+                                <td className="px-3 py-2.5">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="relative shrink-0">
+                                      <Radio
+                                        className={`w-3.5 h-3.5 ${
+                                          consumer.status === "streaming"
+                                            ? "text-emerald-500"
+                                            : "text-stone-300"
+                                        }`}
+                                      />
+                                      {consumer.status === "streaming" && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-sans font-bold text-[#1C1A17] truncate">
+                                        {consumer.agentName}
+                                      </div>
+                                      <div className="text-[10px] font-sans text-stone-400 truncate">
+                                        {consumer.agentPurpose}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span
+                                    className={`px-1.5 py-0.5 text-[10px] font-mono font-bold rounded-full ${
+                                      consumer.status === "streaming"
+                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        : "bg-stone-100 text-stone-600 border border-stone-300"
+                                    }`}
+                                  >
+                                    {consumer.status === "streaming" ? "LIVE" : "END"}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <div className="flex items-center gap-1 text-[#8C2C16]">
+                                    <Clock className="w-3 h-3" />
+                                    <span className="text-[10px] font-mono font-bold">
+                                      {formatDuration(consumer.elapsedSec)}
+                                      {consumer.status === "streaming" &&
+                                        ` / ${formatDuration(consumer.durationSeconds)}`}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span className="text-[10px] font-mono font-bold text-[#8C2C16]">
+                                    {consumer.ratePerSecondMist.toLocaleString()}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span className="text-[10px] font-mono font-bold text-[#1C1A17]">
+                                    {(consumer.depositMist / 1_000_000_000).toFixed(4)} SUI
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5 text-right">
+                                  <a
+                                    href={`https://suiscan.xyz/testnet/object/${consumer.streamId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] font-mono text-[#8C2C16] hover:underline inline-flex items-center gap-0.5"
+                                  >
+                                    {consumer.streamId.substring(0, 8)}…
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                </td>
+                              </tr>
+                            ));
+                          })()}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                  {/* Load more */}
+                  {(() => {
+                    const filtered = consumers.filter((c) => consumerFilter === 'all' || c.status === consumerFilter);
+                    const shown = consumerPage * CONSUMERS_PER_PAGE;
+                    if (shown < filtered.length) {
+                      return (
+                        <button
+                          onClick={() => setConsumerPage((p) => p + 1)}
+                          className="w-full mt-2 py-2 text-[10px] font-sans font-bold text-stone-400 hover:text-[#8C2C16] bg-[#FAF9F6] border border-stone-200 rounded-lg hover:border-[#8C2C16] transition-all"
+                        >
+                          Show more ({filtered.length - shown} remaining)
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
+                </>
               ) : (
                 <div className="p-8 bg-[#FAF9F6] border border-stone-200 rounded-lg text-center">
                   <Users className="w-9 h-9 text-stone-200 mx-auto mb-3" />
                   <p className="text-sm font-sans font-bold text-[#1C1A17]">
-                    No consumers yet
+                    {consumerFilter !== 'all' ? 'No matching agents' : 'No consumers yet'}
                   </p>
                   <p className="text-xs text-stone-400 mt-1">
-                    Agents will appear here once they start streaming from your
-                    API.
+                    {consumerFilter !== 'all'
+                      ? 'Try a different filter'
+                      : 'Agents will appear here once they start streaming from your API.'}
                   </p>
                 </div>
               )}
@@ -786,7 +877,7 @@ export default function ProviderPage({
                   {totalEarnedSui.toFixed(4)}
                 </div>
                 <div className="text-xs font-mono text-stone-400">
-                  SUI earned (off-chain)
+                  SUI earned (live)
                 </div>
               </div>
               <div className="border-t border-stone-200 pt-3 mt-3">
@@ -864,47 +955,79 @@ export default function ProviderPage({
                     </button>
                   )}
 
-                  {/* Per-stream breakdown */}
-                  <div className="space-y-2">
-                    {providerStreams.streams.map((stream) => (
-                      <div
-                        key={stream.streamId}
-                        className="p-2.5 bg-white border border-stone-200 rounded-lg"
-                      >
-                        <div className="flex items-center justify-between mb-1.5">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <Radio className={`w-3 h-3 shrink-0 ${stream.status === 'streaming' ? 'text-emerald-500' : 'text-stone-400'}`} />
-                            <span className="text-[10px] font-sans font-bold text-[#1C1A17] truncate">
-                              {stream.agentName}
-                            </span>
-                          </div>
-                          <span className={`text-[10px] font-mono font-bold ${stream.claimableMist > 0 ? 'text-emerald-700' : 'text-stone-400'}`}>
-                            {stream.claimableSui < 0.001 && stream.claimableMist > 0
-                              ? `${stream.claimableMist} μ`
-                              : `${stream.claimableSui.toFixed(6)} SUI`}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-[9px] font-mono text-stone-400 mb-1.5">
-                          <span>Balance: {stream.onChainBalanceSui.toFixed(6)} SUI</span>
-                          <span>{stream.status === 'streaming' ? '● Live' : '○ Ended'}</span>
-                        </div>
-                        {stream.claimableMist > 0 && (
-                          <button
-                            onClick={() => handleWithdrawStream(stream)}
-                            disabled={withdrawingStreamId === stream.streamId || !isWalletConnected}
-                            className="w-full py-1.5 text-[10px] font-sans font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition-all flex items-center justify-center gap-1 disabled:opacity-40"
-                          >
-                            {withdrawingStreamId === stream.streamId ? (
-                              <RefreshCw className="w-2.5 h-2.5 animate-spin" />
-                            ) : (
-                              <Download className="w-2.5 h-2.5" />
-                            )}
-                            {withdrawingStreamId === stream.streamId ? 'Withdrawing...' : 'Withdraw'}
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                  {/* Per-stream compact table */}
+                  <div className="bg-white border border-stone-200 rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-stone-200 bg-stone-50">
+                            <th className="px-2.5 py-1.5 text-[9px] font-sans font-bold text-stone-400 uppercase">Agent</th>
+                            <th className="px-2.5 py-1.5 text-[9px] font-sans font-bold text-stone-400 uppercase">Balance</th>
+                            <th className="px-2.5 py-1.5 text-[9px] font-sans font-bold text-stone-400 uppercase">Claimable</th>
+                            <th className="px-2.5 py-1.5 text-[9px] font-sans font-bold text-stone-400 uppercase text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(() => {
+                            const streamPageItems = providerStreams.streams.slice(0, streamPage * STREAMS_PER_PAGE);
+                            return streamPageItems.map((stream) => (
+                              <tr key={stream.streamId} className="border-b border-stone-50 last:border-b-0 hover:bg-stone-50 transition-colors">
+                                <td className="px-2.5 py-2">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <Radio className={`w-2.5 h-2.5 shrink-0 ${stream.status === 'streaming' ? 'text-emerald-500' : 'text-stone-300'}`} />
+                                    <span className="text-[10px] font-sans font-bold text-[#1C1A17] truncate">
+                                      {stream.agentName}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-2.5 py-2">
+                                  <span className="text-[10px] font-mono text-stone-500">
+                                    {stream.onChainBalanceSui.toFixed(4)}
+                                  </span>
+                                </td>
+                                <td className="px-2.5 py-2">
+                                  <span className={`text-[10px] font-mono font-bold ${stream.claimableMist > 0 ? 'text-emerald-700' : 'text-stone-400'}`}>
+                                    {stream.claimableSui < 0.001 && stream.claimableMist > 0
+                                      ? `${stream.claimableMist}μ`
+                                      : `${stream.claimableSui.toFixed(4)}`}
+                                  </span>
+                                </td>
+                                <td className="px-2.5 py-2 text-right">
+                                  {stream.claimableMist > 0 ? (
+                                    <button
+                                      onClick={() => handleWithdrawStream(stream)}
+                                      disabled={withdrawingStreamId === stream.streamId || !isWalletConnected}
+                                      className="px-2 py-1 text-[9px] font-sans font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition-all flex items-center justify-center gap-1 disabled:opacity-40 ml-auto"
+                                    >
+                                      {withdrawingStreamId === stream.streamId ? (
+                                        <RefreshCw className="w-2 h-2 animate-spin" />
+                                      ) : (
+                                        <Download className="w-2 h-2" />
+                                      )}
+                                      {withdrawingStreamId === stream.streamId ? '...' : 'Withdraw'}
+                                    </button>
+                                  ) : (
+                                    <span className="text-[9px] font-mono text-stone-300">
+                                      {stream.status === 'streaming' ? '● Live' : '○ Done'}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ));
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
+                  {/* Load more streams */}
+                  {providerStreams.streams.length > streamPage * STREAMS_PER_PAGE && (
+                    <button
+                      onClick={() => setStreamPage((p) => p + 1)}
+                      className="w-full mt-2 py-1.5 text-[10px] font-sans font-bold text-stone-400 hover:text-[#8C2C16] bg-white border border-stone-200 rounded-lg hover:border-[#8C2C16] transition-all"
+                    >
+                      Show more ({providerStreams.streams.length - streamPage * STREAMS_PER_PAGE} remaining)
+                    </button>
+                  )}
                 </>
               ) : (
                 <div className="py-4 text-center">
