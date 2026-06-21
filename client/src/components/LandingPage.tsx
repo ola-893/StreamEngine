@@ -125,15 +125,13 @@ export default function LandingPage({
           </motion.div>
 
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.5 }} className="flex items-center gap-3 sm:gap-4 group flex-wrap">
-            {/* <button onClick={() => navigate("/onboarding")} className="py-4.5 px-7 bg-[#1C1A17] hover:bg-[#2E2E38] text-[#FAF9F5] font-mono font-bold text-xs tracking-wider uppercase rounded-full flex items-center gap-3 shadow-lg hover:shadow-xl hover:translate-y-[-1px] transition-all cursor-pointer">
-              <span>{isWalletConnected ? "SETUP YOUR AGENT" : "REGISTER YOUR WEBSITE"}</span>
-              <div className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center group-hover:translate-x-1 transition-transform">
-                <ChevronRight className="w-3.5 h-3.5 text-white" />
-              </div>
-            </button> */}
-            <div className="text-[10px] font-mono text-[#1C1A17]/55 leading-tight uppercase font-semibold">
-              settlement<br/><span className="text-[#8C2C16] font-black">IMMEDIATE / ON-CHAIN</span>
+            <div  className="py-4.5 px-7 bg-[#1C1A17]  text-[#FAF9F5] font-mono font-bold text-xs tracking-wider uppercase rounded-full flex items-center gap-3 shadow-lg hover:shadow-xl hover:translate-y-[-1px] transition-all ">
+              <span> settlement<span className="text-white font-black"> IMMEDIATE <br/>/ ON-CHAIN</span></span>
+              
             </div>
+            {/* <div className="text-[10px] font-mono text-[#1C1A17]/55 leading-tight uppercase font-semibold">
+              settlement<br/><span className="text-[#8C2C16] font-black">IMMEDIATE / ON-CHAIN</span>
+            </div> */}
           </motion.div>
         </div>
 

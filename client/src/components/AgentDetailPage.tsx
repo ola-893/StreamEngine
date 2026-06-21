@@ -905,13 +905,13 @@ export default function AgentDetailPage({
                 {discoveryLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
                 Discover
               </button>
-              <button
+              {/* <button
                 onClick={() => setFundModalOpen(true)}
                 className="px-3 py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg text-xs font-sans font-bold transition-all flex items-center justify-center gap-1.5"
               >
                 <DollarSign className="w-3 h-3" />
                 Fund
-              </button>
+              </button> */}
               <button
                 onClick={() => setWithdrawModalOpen(true)}
                 disabled={liveBalanceSui <= 0.01}
