@@ -11,8 +11,9 @@ import {
   Shield,
   Activity,
   Cpu,
-  Globe
+  Globe,
 } from "lucide-react";
+
 
 interface LandingPageProps {
   isWalletConnected: boolean;
@@ -46,7 +47,7 @@ export default function LandingPage({
       <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] bg-[#9F9FEF]/15 rounded-full blur-[150px] pointer-events-none" />
 
       {/* TOP BAR */}
-      <header className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between relative z-50">
+      <header className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between relative z-50">
         <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate("/")}>
           <img src="/logo.svg" alt="FlowGate" className="w-8 h-8" />
           <span className="font-mono text-xs tracking-widest font-black uppercase">FLOWGATE</span>
@@ -61,10 +62,10 @@ export default function LandingPage({
         </nav>
 
         {/* Right Wallet / Entry buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {isWalletConnected ? (
             <div className="flex items-center gap-1.5">
-              <div className="px-3.5 py-2 bg-[#FAF9F6] border border-[#1C1A17]/15 rounded-full font-mono text-[10.5px] font-bold text-[#1C1A17] flex items-center gap-2 shadow-sm">
+              <div className="hidden sm:flex px-3.5 py-2 bg-[#FAF9F6] border border-[#1C1A17]/15 rounded-full font-mono text-[10.5px] font-bold text-[#1C1A17] items-center gap-2 shadow-sm">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 {walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "SUI Connected"}
               </div>
@@ -74,33 +75,34 @@ export default function LandingPage({
             </div>
           ) : (
             <div className="flex items-center" style={{ transform: "scale(0.85)", transformOrigin: "right center" }}>
-              <ConnectButton />
+              <ConnectButton
+                modalOptions={{
+                  filterFn: (wallet: any) => /slush|sui wallet/i.test(wallet.name),
+                }}
+              />
             </div>
           )}
 
           {isWalletConnected ? (
-            <button onClick={() => navigate("/onboarding")} className="px-4.5 py-2.5 bg-[#8C2C16] hover:bg-[#A63A23] text-white rounded-full text-[10px] font-mono font-bold tracking-wider transition-all flex items-center gap-1.5 shadow-md">
+            <button onClick={() => navigate("/onboarding")} className="px-4 sm:px-5 py-2 sm:py-2.5 bg-[#8C2C16] hover:bg-[#A63A23] text-white rounded-full text-[10px] font-mono font-bold tracking-wider transition-all flex items-center gap-1.5 shadow-md">
               Get Started<ArrowRight className="w-3.5 h-3.5" />
             </button>
           ) : (
             <></>
-            // <button onClick={() => navigate("/directory")} className="hidden lg:block px-4 py-2 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-[10px] font-mono font-bold transition-all uppercase cursor-pointer">
-            //   Guest Access
-            // </button>
           )}
         </div>
       </header>
 
       {/* HERO */}
-      <main id="hero-section" className="max-w-7xl mx-auto px-6 pt-10 pb-16 relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+      <main id="hero-section" className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-10 pb-10 sm:pb-16 relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
         <div className="lg:col-span-6 flex flex-col items-start justify-center gap-8 relative z-25">
           <div className="flex flex-col gap-5">
-            <motion.div initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }} className="flex items-center gap-2 text-[#8C2C16] font-mono text-[10px] tracking-[0.25em] uppercase font-bold">
+            <motion.div initial={{ opacity: 0, x: -15 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }} className="flex items-center gap-2 text-[#8C2C16] font-mono text-[9px] sm:text-[10px] tracking-[0.25em] uppercase font-bold">
               <span className="w-1.5 h-1.5 bg-[#8C2C16]" />
               DECENTRALIZED AGENTIC PAYMENT RAIL // SUI TESTNET
             </motion.div>
 
-            <h1 className="font-sans text-5xl sm:text-6xl xl:text-7xl font-semibold tracking-tighter text-[#1C1A17] leading-[0.92] select-none">
+            <h1 className="font-sans text-4xl sm:text-5xl md:text-6xl xl:text-7xl font-semibold tracking-tighter text-[#1C1A17] leading-[0.92] select-none">
               <motion.span initial={{ opacity: 0, y: 35 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.1 }} className="block">Web APIs <span className="font-light text-[#1C1A17]/65">—</span></motion.span>
               <motion.span initial={{ opacity: 0, y: 35 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.2 }} className="block text-[#1C1A17]/85">monetized</motion.span>
               <motion.span initial={{ opacity: 0, y: 35 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.3 }} className="flex flex-wrap items-center gap-3.5 mt-2 text-2xl sm:text-3xl xl:text-4xl font-light tracking-tight text-[#1C1A17]">
@@ -114,7 +116,7 @@ export default function LandingPage({
             </h1>
           </div>
 
-          <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.4 }} className="w-full max-w-sm bg-[#FAF9F6]/90 backdrop-blur-md p-5 border border-[#1C1A17]/10 rounded-3xl shadow-sm flex flex-col gap-3 group hover:border-[#1C1A17]/20 transition-all duration-300 hover:shadow-md">
+          <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.4 }} className="w-full max-w-sm bg-[#FAF9F6]/90 backdrop-blur-md p-4 sm:p-5 border border-[#1C1A17]/10 rounded-3xl shadow-sm flex flex-col gap-3 group hover:border-[#1C1A17]/20 transition-all duration-300 hover:shadow-md">
             <div className="flex items-center justify-between">
               <span className="px-3.5 py-1 bg-[#1C1A17] text-[#FAF9F5] rounded-full font-mono text-[9px] font-bold uppercase tracking-wider">+144,390 Queries Cleared</span>
               <div className="w-6 h-6 rounded-full bg-[#1C1A17]/5 flex items-center justify-center group-hover:bg-[#1C1A17]/10 transition-colors">
@@ -128,7 +130,7 @@ export default function LandingPage({
             </div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.5 }} className="flex items-center gap-4 group">
+          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.5 }} className="flex items-center gap-3 sm:gap-4 group flex-wrap">
             <button onClick={() => navigate("/onboarding")} className="py-4.5 px-7 bg-[#1C1A17] hover:bg-[#2E2E38] text-[#FAF9F5] font-mono font-bold text-xs tracking-wider uppercase rounded-full flex items-center gap-3 shadow-lg hover:shadow-xl hover:translate-y-[-1px] transition-all cursor-pointer">
               <span>{isWalletConnected ? "SETUP YOUR AGENT" : "REGISTER YOUR WEBSITE"}</span>
               <div className="w-5 h-5 bg-white/10 rounded-full flex items-center justify-center group-hover:translate-x-1 transition-transform">
@@ -167,7 +169,7 @@ export default function LandingPage({
       </main>
 
       {/* STATS */}
-      <section id="protocol-stats" className="max-w-7xl mx-auto px-6 mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 relative z-30">
+      <section id="protocol-stats" className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 sm:mt-12 grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8 relative z-30">
         {[
           { num: "01", icon: <Globe className="w-3.5 h-3.5 text-[#1C1A17]/30" />, title: "Voluntary Payout Handshake", desc: "Website and API owners voluntarily register their endpoints, specify custom per-query rules or token prices, and bind their Sui payment coffer address instantly." },
           { num: "02", icon: <Cpu className="w-3.5 h-3.5 text-[#1C1A17]/30" />, title: "Continuous Micropayments", desc: "Every time an autonomous scraper, crawlbot, or LLM agent fetches your api endpoint, microsec payments clear directly into your wallet with zero intermediaries." },
@@ -185,8 +187,8 @@ export default function LandingPage({
       </section>
 
       {/* OPERATIONAL FLOW */}
-      <section id="consensus-flow" className="max-w-7xl mx-auto px-6 mt-20 relative z-30">
-        <div className="border border-[#1C1A17]/10 bg-[#FAF9F6] p-8 md:p-12 rounded-[32px] shadow-sm">
+      <section id="consensus-flow" className="max-w-7xl mx-auto px-4 sm:px-6 mt-12 sm:mt-20 relative z-30">
+        <div className="border border-[#1C1A17]/10 bg-[#FAF9F6] p-5 sm:p-8 md:p-12 rounded-2xl sm:rounded-[32px] shadow-sm">
           <div className="flex flex-col lg:flex-row gap-12 items-start justify-between">
             <div className="lg:w-5/12 flex flex-col gap-6">
               <span className="font-mono text-[9px] text-[#8C2C16] uppercase tracking-widest font-black flex items-center gap-2">
@@ -287,7 +289,7 @@ export default function LandingPage({
       </section>
 
       {/* BENEFITS */}
-      <section id="benefits-grid" className="max-w-7xl mx-auto px-6 mt-16 relative z-30">
+      <section id="benefits-grid" className="max-w-7xl mx-auto px-4 sm:px-6 mt-10 sm:mt-16 relative z-30">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="bg-[#FAF9F6]/80 p-8 border border-[#1C1A17]/10 rounded-3xl flex flex-col gap-6">
             <div className="w-10 h-10 rounded-full bg-[#8C2C16]/10 flex items-center justify-center"><Globe className="w-5 h-5 text-[#8C2C16]" /></div>
@@ -311,7 +313,7 @@ export default function LandingPage({
       </section>
 
       {/* FOOTER */}
-      <footer className="max-w-7xl mx-auto px-6 mt-20 pt-8 border-t border-[#1C1A17]/10 flex flex-col md:flex-row items-center justify-between gap-4 select-none relative z-30">
+      <footer className="max-w-7xl mx-auto px-4 sm:px-6 mt-12 sm:mt-20 pt-6 sm:pt-8 border-t border-[#1C1A17]/10 flex flex-col md:flex-row items-center justify-between gap-4 select-none relative z-30">
         <span className="font-mono text-[9px] text-[#1C1A17]/45 uppercase font-bold tracking-wider">© 2026 FLOWGATE_INIT • DECENTRALIZED PAYMENT CHANNELS SECURED</span>
         <div className="flex items-center gap-6 font-mono text-[9px] font-bold text-[#1C1A17]/50 uppercase">
           {/* <a href="#github" className="hover:text-[#1C1A17] transition-colors">GITHUB</a>

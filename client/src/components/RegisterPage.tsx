@@ -190,7 +190,7 @@ export default function RegisterPage({ onAddEndpoint, walletAddress, isWalletCon
       </div>
 
       {/* Flag Header */}
-      <div className="flex items-center gap-4 mb-8 border-b border-stone-300 pb-6">
+      <div className="flex items-center gap-3 sm:gap-4 mb-6 sm:mb-8 border-b border-stone-300 pb-6">
         <button 
           onClick={() => {
             if (step > 1 && !deploymentSuccess) setStep(step - 1);
@@ -201,17 +201,17 @@ export default function RegisterPage({ onAddEndpoint, walletAddress, isWalletCon
           <ArrowLeft className="w-4 h-4 text-stone-700" />
         </button>
         <div>
-          <h1 className="font-sans text-3xl font-bold text-[#1C1A17]">
+          <h1 className="font-sans text-2xl sm:text-3xl font-bold text-[#1C1A17]">
             Register a New Endpoint
           </h1>
-          <p className="text-sm font-sans text-stone-500 mt-0.5">
+          <p className="text-xs sm:text-sm font-sans text-stone-500 mt-0.5">
             Add your data source or API to the FlowGate directory.
           </p>
         </div>
       </div>
 
       {/* Stepper Wizard Bar */}
-      <div className="grid grid-cols-3 gap-3 mb-10">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6 sm:mb-10">
         {[{ id: 1, label: "Details" },
           { id: 2, label: "Pricing" },
           { id: 3, label: "Deploy" }
@@ -250,7 +250,7 @@ export default function RegisterPage({ onAddEndpoint, walletAddress, isWalletCon
       )}
 
       {/* Main Form container */}
-      <div className="border border-stone-200 bg-white p-8 shadow-sm">
+      <div className="border border-stone-200 bg-white p-5 sm:p-8 shadow-sm">
         
         {/* STEP 1: Metadata inputs */}
         {step === 1 && !deploymentSuccess && (

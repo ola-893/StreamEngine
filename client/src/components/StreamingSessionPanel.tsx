@@ -249,7 +249,7 @@ export default function StreamingSessionPanel({
       </div>
 
       {/* Row 3: Rate + Drained + Balance in one line */}
-      <div className="flex items-center gap-4 mb-3 text-[10px] font-mono">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-3 text-[10px] font-mono">
         <span className="text-stone-400">
           Rate:{" "}
           <span className="font-bold text-[#8C2C16]">

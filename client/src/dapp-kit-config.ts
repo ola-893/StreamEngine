@@ -19,5 +19,5 @@ export const dAppKit = createDAppKit({
     (client as any).network = network;
     return client;
   },
-  enableBurnerWallet: true,
+  enableBurnerWallet: false,
 });

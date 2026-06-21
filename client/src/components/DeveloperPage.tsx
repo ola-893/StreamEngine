@@ -85,12 +85,12 @@ export default function DeveloperPage(_props: DeveloperPageProps) {
       </div>
 
       {/* Flag Header */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 mb-10 border-b border-stone-300 pb-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 sm:mb-10 border-b border-stone-300 pb-6">
         <div>
-          <h1 className="font-sans text-3xl font-bold text-[#1C1A17]">
+          <h1 className="font-sans text-2xl sm:text-3xl font-bold text-[#1C1A17]">
             Developer Tools
           </h1>
-          <p className="text-sm text-stone-500 mt-0.5">
+          <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
             SDK quickstarts, API explorer, and smart contract addresses.
           </p>
         </div>
@@ -105,7 +105,7 @@ export default function DeveloperPage(_props: DeveloperPageProps) {
       </div>
 
       {/* CORE GRID LAYOUT: QUICKSTART & EXPLORER (Left) + CORE ADDRESSES (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
         
         {/* Quickstart and SDK query explorer */}
         <div className="lg:col-span-8 flex flex-col gap-6">

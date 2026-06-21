@@ -568,8 +568,8 @@ export default function AgentDetailPage({
       />
 
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           <button
             onClick={() => navigate("/agent/dashboard")}
             className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-100 transition-all"
@@ -581,10 +581,10 @@ export default function AgentDetailPage({
               <span className="w-1.5 h-1.5 bg-[#8C2C16]" />
               Agent Detail
             </div>
-            <h1 className="font-sans text-3xl font-bold text-[#1C1A17]">
+            <h1 className="font-sans text-2xl sm:text-3xl font-bold text-[#1C1A17]">
               {agent.name}
             </h1>
-            <p className="text-sm text-stone-500 mt-1">
+            <p className="text-xs sm:text-sm text-stone-500 mt-1">
               {agent.description || agent.purpose}
             </p>
           </div>
@@ -611,7 +611,7 @@ export default function AgentDetailPage({
       )}
 
       {/* Overview */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         {[
           { label: "Wallet", value: `${liveBalanceSui.toFixed(4)} SUI`, icon: Wallet, tone: "text-[#8C2C16]" },
           { label: "Streams", value: String(streams.length), icon: Radio, tone: streams.length > 0 ? "text-emerald-600" : "text-stone-500" },
@@ -633,7 +633,7 @@ export default function AgentDetailPage({
         })}
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px] gap-5 sm:gap-6 items-start">
         <main className="space-y-5 min-w-0">
           <section>              <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">

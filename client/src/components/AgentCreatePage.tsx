@@ -200,16 +200,16 @@ export default function AgentCreatePage({
       {/* Top progress bar */}
       <div className="w-full px-6 pt-6">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate("/")}>
-              <div className="flex items-center gap-1 bg-[#1C1A17] text-[#E5E5ED] p-2 leading-none font-black text-sm tracking-tighter">
+              <div className="flex items-center gap-1 bg-[#1C1A17] text-[#E5E5ED] p-1.5 sm:p-2 leading-none font-black text-xs sm:text-sm tracking-tighter">
                 <span>Σ</span><span>N</span>
               </div>
-              <span className="font-mono text-xs tracking-widest font-black uppercase">FLOWGATE</span>
+              <span className="font-mono text-[10px] sm:text-xs tracking-widest font-black uppercase">FLOWGATE</span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {isWalletConnected && walletAddress && (
-                <span className="px-3 py-1.5 bg-[#FAF9F6] border border-stone-200 rounded-full font-sans text-xs font-bold text-[#1C1A17] flex items-center gap-2">
+                <span className="hidden sm:flex px-3 py-1.5 bg-[#FAF9F6] border border-stone-200 rounded-full font-sans text-xs font-bold text-[#1C1A17] items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                   {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
                 </span>
@@ -254,8 +254,7 @@ export default function AgentCreatePage({
                   <Bot className="w-10 h-10 text-[#9F9FEF]" />
                 </div>
 
-                <div className="flex flex-col gap-3">
-                  <h1 className="font-sans text-3xl sm:text-4xl font-bold text-[#1C1A17]">
+                <div className="flex flex-col gap-3">                    <h1 className="font-sans text-2xl sm:text-3xl md:text-4xl font-bold text-[#1C1A17]">
                     Create your AI Agent
                   </h1>
                   <p className="text-sm text-stone-600 max-w-lg leading-relaxed">

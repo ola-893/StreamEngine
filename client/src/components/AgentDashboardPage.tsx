@@ -106,9 +106,9 @@ export default function AgentDashboardPage({
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-[#8C2C16] font-sans text-sm font-semibold mb-2">
             <span className="w-1.5 h-1.5 bg-[#8C2C16]" />
@@ -131,7 +131,7 @@ export default function AgentDashboardPage({
       </div>
 
       {/* Fleet Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {[
           {
             label: "Total Agents",
@@ -170,7 +170,7 @@ export default function AgentDashboardPage({
       </div>
 
       {/* Agent Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
         <AnimatePresence>
           {agents.map((agent) => {
             const spendPercent =

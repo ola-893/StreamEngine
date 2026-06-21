@@ -13,8 +13,10 @@ import {
   Zap,
   Shield,
   Play,
-  Bot
+  Bot,
+  Download
 } from "lucide-react";
+import SlushWalletBanner from "./SlushWalletBanner";
 
 interface OnboardingPageProps {
   isWalletConnected: boolean;
@@ -43,12 +45,11 @@ export default function OnboardingPage({
       {/* Top progress bar */}
       <div className="w-full px-6 pt-6">
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate("/")}>
-              <div className="flex items-center gap-1 bg-[#1C1A17] text-[#E5E5ED] p-2 leading-none font-black text-sm tracking-tighter">
+          <div className="flex items-center justify-between mb-4">              <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => navigate("/")}>
+              <div className="flex items-center gap-1 bg-[#1C1A17] text-[#E5E5ED] p-1.5 sm:p-2 leading-none font-black text-xs sm:text-sm tracking-tighter">
                 <span>Σ</span><span>N</span>
               </div>
-              <span className="font-mono text-xs tracking-widest font-black uppercase">FLOWGATE</span>
+              <span className="font-mono text-[10px] sm:text-xs tracking-widest font-black uppercase">FLOWGATE</span>
             </div>
             <button
               onClick={() => navigate("/")}
@@ -59,7 +60,7 @@ export default function OnboardingPage({
           </div>
 
           {/* Step indicators */}
-          <div className="grid grid-cols-4 gap-2 mb-8">
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 mb-6 sm:mb-8">
             {steps.map((s) => (
               <div key={s.id} className="flex flex-col gap-1">
                 <div className={`h-1 transition-all duration-500 ${step >= s.id ? "bg-[#8C2C16]" : "bg-stone-200"}`} />
@@ -74,7 +75,7 @@ export default function OnboardingPage({
 
       {/* Main content area */}
       <div className="flex-1 flex items-center justify-center px-6 pb-12">
-        <div className="max-w-3xl w-full">
+        <div className="max-w-3xl w-full px-2 sm:px-0">
           <AnimatePresence mode="wait">
             {/* STEP 1: Welcome */}
             {step === 1 && (
@@ -89,8 +90,7 @@ export default function OnboardingPage({
                   <Bot className="w-10 h-10 text-[#8AF2D0]" />
                 </div>
 
-                <div className="flex flex-col gap-3">
-                  <h1 className="font-serif text-4xl sm:text-5xl font-semibold tracking-tighter text-[#1C1A17] leading-[0.95]">
+                <div className="flex flex-col gap-3">                    <h1 className="font-serif text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tighter text-[#1C1A17] leading-[0.95]">
                     Welcome to <span className="italic text-[#8C2C16]">FlowGate</span>
                   </h1>
                   <p className="text-sm text-stone-600 max-w-lg leading-relaxed font-sans">
@@ -99,7 +99,7 @@ export default function OnboardingPage({
                   </p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-6 w-full max-w-lg">
+                <div className="grid grid-cols-3 gap-3 sm:gap-6 w-full max-w-lg">
                   {[
                     { icon: <Globe className="w-5 h-5" />, title: "Register", desc: "List your website endpoints" },
                     { icon: <Cpu className="w-5 h-5" />, title: "Connect", desc: "AI agents discover your API" },
@@ -134,21 +134,23 @@ export default function OnboardingPage({
                 exit={{ opacity: 0, y: -20 }}
                 className="flex flex-col items-center text-center gap-8"
               >
-                <div className="w-20 h-20 rounded-full bg-[#FAF9F6] border border-stone-200 flex items-center justify-center">
-                  <Wallet className="w-10 h-10 text-[#8C2C16]" />
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-[#6FBCF0] to-[#4A90D9] flex items-center justify-center">
+                  <Wallet className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
                 </div>
 
-                <div className="flex flex-col gap-3">
-                  <h2 className="font-serif text-3xl font-semibold tracking-tight text-[#1C1A17]">
-                    Your Sui wallet is Connected
+                <div className="flex flex-col gap-3 text-center">
+                  <h2 className="font-serif text-2xl sm:text-3xl font-semibold tracking-tight text-[#1C1A17]">
+                    Connect with Slush Wallet
                   </h2>
-                  <p className="text-sm text-stone-600 max-w-md leading-relaxed">
-                    Click on continue
+                  <p className="text-xs sm:text-sm text-stone-600 max-w-md leading-relaxed">
+                    FlowGate uses the <span className="font-semibold text-[#1C1A17]">Slush Wallet</span> (formerly Sui Wallet) — the official Sui blockchain wallet. Install the browser extension or mobile app, then click connect below.
                   </p>
                 </div>
 
+                <SlushWalletBanner variant="card" className="w-full max-w-md" />
+
                 {isWalletConnected ? (
-                  <div className="flex flex-col items-center gap-3 p-6 bg-emerald-50 border border-emerald-200 rounded-2xl">
+                  <div className="flex flex-col items-center gap-3 p-4 sm:p-6 bg-emerald-50 border border-emerald-200 rounded-2xl">
                     <div className="flex items-center gap-2">
                       <Check className="w-5 h-5 text-emerald-700" />
                       <span className="text-sm font-mono font-bold text-emerald-800 uppercase">Wallet Connected</span>
@@ -165,7 +167,20 @@ export default function OnboardingPage({
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-4">
-                    <ConnectButton />
+                    <ConnectButton
+                      modalOptions={{
+                        filterFn: (wallet: any) => /slush|sui wallet/i.test(wallet.name),
+                      }}
+                    />
+                    <a
+                      href="https://slush.app"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#4A90D9] hover:bg-[#3A7BC8] text-white rounded-full text-xs font-mono font-bold transition-all"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download Slush Wallet
+                    </a>
                     <button
                       onClick={() => setStep(3)}
                       className="text-xs font-mono text-stone-500 hover:text-stone-800 underline underline-offset-4 transition-colors cursor-pointer"
@@ -202,7 +217,7 @@ export default function OnboardingPage({
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-lg">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 w-full max-w-lg">
                   {/* Provider card */}
                   <button
                     onClick={() => setSelectedRole("provider")}

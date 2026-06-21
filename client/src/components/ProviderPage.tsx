@@ -544,8 +544,8 @@ export default function ProviderPage({
         </div>
 
         {/* Header */}
-        <div className="flex items-start justify-between mb-8">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+          <div className="flex items-center gap-3 sm:gap-4">
             <button
               onClick={() => setSelectedId(null)}
               className="p-2 rounded-lg border border-stone-200 text-stone-500 hover:bg-stone-100 transition-all"
@@ -581,7 +581,7 @@ export default function ProviderPage({
         </div>
 
         {/* Metrics */}
-        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mb-6 sm:mb-8">
           {[
             {
               label: "Total Earned",
@@ -635,7 +635,7 @@ export default function ProviderPage({
           <EarningsChart consumers={consumers} totalEarnedMist={liveTotalEarnedMist} />
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px] gap-5 sm:gap-6 items-start">
           <main className="space-y-5 min-w-0">
             {/* Consumers List */}
             <section>
@@ -1217,30 +1217,26 @@ export default function ProviderPage({
         </span>
         <span>/</span>
         <span className="text-stone-400">Provider Dashboard</span>
-      </div>
-
-      {/* Header */}
-      <div className="flex items-start justify-between mb-8 border-b border-stone-300 pb-6">
-        <div>
-          <h1 className="font-sans text-3xl font-bold text-[#1C1A17]">
-            Provider Dashboard
-          </h1>
-          <p className="text-sm text-stone-500 mt-0.5">
-            Manage your APIs and monitor agent consumption.
-          </p>
-        </div>
-        <button
-          onClick={() => navigate("/register")}
-          className="px-4 py-2.5 bg-[#8C2C16] hover:bg-[#A63A23] text-white rounded-full text-xs font-sans font-bold transition-all flex items-center gap-2"
-        >
-          Register New API
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {/* Provider Cards */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      </div>        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 sm:mb-8 border-b border-stone-300 pb-6">
+          <div>
+            <h1 className="font-sans text-2xl sm:text-3xl font-bold text-[#1C1A17]">
+              Provider Dashboard
+            </h1>
+            <p className="text-xs sm:text-sm text-stone-500 mt-0.5">
+              Manage your APIs and monitor agent consumption.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate("/register")}
+            className="px-4 py-2.5 bg-[#8C2C16] hover:bg-[#A63A23] text-white rounded-full text-xs font-sans font-bold transition-all flex items-center gap-2 shrink-0"
+          >
+            Register New API
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>        {/* Provider Cards */}
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
@@ -1253,7 +1249,7 @@ export default function ProviderPage({
           ))}
         </div>
       ) : providers.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
           {providers.map((provider) => (
             <button
               key={provider.id}

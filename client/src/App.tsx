@@ -13,8 +13,10 @@ import {
   Menu,
   X,
   Wallet,
-  ChevronRight
+  ChevronRight,
+  Download
 } from "lucide-react";
+import SlushWalletBanner from "./components/SlushWalletBanner";
 
 import { ToastProvider } from "./lib/toast-context";
 import LandingPage from "./components/LandingPage";
@@ -272,14 +274,17 @@ export default function App() {
     <div className="flex flex-col md:flex-row min-h-screen bg-[#E5E5ED] text-[#1C1A17] antialiased font-sans selection:bg-[#E8DCC4] selection:text-black">
 
       {/* MOBILE HEADER BAR */}
-      <div className="md:hidden flex items-center justify-between px-6 py-4 bg-[#E5E5ED] border-b border-stone-200">
-        <div className="flex flex-col">
-          <span className="font-sans font-bold text-lg">Flowgate</span>
-          <span className="text-xs text-[#7C7567]">Workspace</span>
+      <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#E5E5ED] border-b border-stone-200">
+        <div className="flex items-center gap-2">
+          <img src="/logo.svg" alt="FlowGate" className="w-7 h-7" />
+          <div className="flex flex-col">
+            <span className="font-sans font-bold text-base">Flowgate</span>
+            <span className="text-[10px] text-[#7C7567]">Workspace</span>
+          </div>
         </div>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-1.5 border border-stone-300 bg-stone-50 select-none text-stone-700"
+          className="p-2 border border-stone-300 bg-stone-50 select-none text-stone-700"
         >
           {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -318,11 +323,11 @@ export default function App() {
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-1.5 font-mono text-xs text-[#1C1A17] font-semibold">
                   <Wallet className="w-3.5 h-3.5 text-stone-500" />
-                  <span>{walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Sui Handshake"}</span>
+                  <span className="truncate">{walletAddress ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : "Sui Handshake"}</span>
                 </div>
                 <div className="flex justify-between items-baseline mt-1 font-mono">
                   <span className="text-xs text-[#7C7567]">SUI Balance</span>
-                  <span className=" text-sm font-bold text-[#1C1A17]">
+                  <span className="text-sm font-bold text-[#1C1A17]">
                     {balanceLoading ? "..." : `${suiBalance.toFixed(4)} SUI`}
                   </span>
                 </div>
@@ -335,12 +340,22 @@ export default function App() {
               </div>
             ) : (
               <div className="flex flex-col gap-2 py-1">
-                <p className="text-[11px] font-serif text-stone-600 leading-normal mb-1">
-                  Connect Sui wallet to access escrow operations.
-                </p>
+                <SlushWalletBanner variant="compact" className="mb-1" />
                 <div className="w-full flex justify-center overflow-hidden rounded-full" style={{ transform: "scale(0.85)" }}>
-                  <ConnectButton />
+                  <ConnectButton
+                    modalOptions={{
+                      filterFn: (wallet: any) => /slush|sui wallet/i.test(wallet.name),
+                    }}
+                  />
                 </div>
+                <a
+                  href="https://slush.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1 text-[9px] font-mono text-[#4A90D9] hover:underline mt-1"
+                >
+                  <Download className="w-2.5 h-2.5" /> Download Slush Wallet
+                </a>
               </div>
             )}
           </div>
@@ -404,7 +419,7 @@ export default function App() {
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="flex-1 bg-[#E5E5ED] min-h-screen text-[#1C1A17] relative p-6 md:p-10 lg:p-14 overflow-x-hidden">
+      <main className="flex-1 bg-[#E5E5ED] min-h-screen text-[#1C1A17] relative p-4 sm:p-6 md:p-10 lg:p-14 overflow-x-hidden">
         <div className="absolute top-0 right-1/4 w-[1px] h-full bg-stone-200/45 pointer-events-none hidden lg:block" />
         <div className="max-w-6xl mx-auto relative z-10">
           <Routes>
