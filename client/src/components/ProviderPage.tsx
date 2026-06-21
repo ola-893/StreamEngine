@@ -1,14 +1,19 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
+import { Transaction } from "@mysten/sui/transactions";
+import { dAppKit } from "../dapp-kit-config";
 import { Endpoint, API_BASE, ProviderListing } from "../types";
 import {
   listProviders,
   getProviderEarnings,
   getProviderConsumers,
+  getProviderStreams,
   updateProvider,
   deleteProvider,
   ProviderConsumer,
+  ProviderStream,
+  ProviderStreamsResponse,
 } from "../lib/api";
 import { useToast } from "../lib/toast-context";
 import {
@@ -27,7 +32,12 @@ import {
   Edit3,
   Trash2,
   ChevronRight,
+  Download,
+  ArrowDownToLine,
+  CircleDollarSign,
 } from "lucide-react";
+
+const PACKAGE_ID = import.meta.env.VITE_SUI_DATA_GATE_PACKAGE_ID || "0xb05b3964df8b88a86cda6b192893399966014af9dd6fc6beb26f1343a0495495";
 
 interface ProviderPageProps {
   endpoints: Endpoint[];
@@ -223,6 +233,13 @@ export default function ProviderPage({
   const [earnings, setEarnings] = useState<number>(0);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  // Provider streams (on-chain balance + claimable)
+  const [providerStreams, setProviderStreams] = useState<ProviderStreamsResponse | null>(null);
+  const [loadingStreams, setLoadingStreams] = useState(false);
+  const [withdrawingStreamId, setWithdrawingStreamId] = useState<string | null>(null);
+  const [withdrawingAll, setWithdrawingAll] = useState(false);
+
+
   // Edit state
   const [editing, setEditing] = useState(false);
   const [editRate, setEditRate] = useState<number>(0);
@@ -251,6 +268,7 @@ export default function ProviderPage({
     if (!selectedId) {
       setConsumers([]);
       setEarnings(0);
+      setProviderStreams(null);
       return;
     }
     setLoadingDetail(true);
@@ -263,6 +281,107 @@ export default function ProviderPage({
       setLoadingDetail(false);
     });
   }, [selectedId]);
+
+  // Fetch on-chain stream data for withdrawal
+  const fetchProviderStreams = useCallback(async () => {
+    if (!selectedId) return;
+    setLoadingStreams(true);
+    try {
+      const data = await getProviderStreams(selectedId);
+      setProviderStreams(data);
+    } catch {
+      setProviderStreams(null);
+    } finally {
+      setLoadingStreams(false);
+    }
+  }, [selectedId]);
+
+  useEffect(() => {
+    fetchProviderStreams();
+  }, [fetchProviderStreams]);
+
+  // Withdraw from a single stream
+  const handleWithdrawStream = async (stream: ProviderStream) => {
+    if (!isWalletConnected) {
+      addToast({ variant: "error", title: "Wallet not connected", message: "Connect your wallet to withdraw" });
+      return;
+    }
+    if (stream.claimableMist <= 0) {
+      addToast({ variant: "error", title: "Nothing to withdraw", message: "No claimable balance on this stream" });
+      return;
+    }
+    setWithdrawingStreamId(stream.streamId);
+    try {
+      const tx = new Transaction();
+      tx.moveCall({
+        target: `${PACKAGE_ID}::stream::withdraw`,
+        typeArguments: ["0x2::sui::SUI"],
+        arguments: [
+          tx.object(stream.streamId),
+          tx.object("0x6"),
+        ],
+      });
+      const result = await dAppKit.signAndExecuteTransaction({ transaction: tx });
+      console.log(`[withdraw] Single stream tx: ${(result as any)?.digest}`);
+      addToast({
+        variant: "success",
+        title: "Withdrawal successful",
+        message: `Withdrew ${stream.claimableSui.toFixed(6)} SUI from stream`,
+      });
+      // Refresh stream data
+      fetchProviderStreams();
+      fetchProviders();
+    } catch (err: any) {
+      addToast({
+        variant: "error",
+        title: "Withdrawal failed",
+        message: err?.message || "Transaction failed",
+      });
+    } finally {
+      setWithdrawingStreamId(null);
+    }
+  };
+
+  // Withdraw from all streams in a single PTB
+  const handleWithdrawAll = async () => {
+    if (!isWalletConnected || !providerStreams) return;
+    const withdrawable = providerStreams.streams.filter(s => s.claimableMist > 0);
+    if (withdrawable.length === 0) {
+      addToast({ variant: "error", title: "Nothing to withdraw", message: "No claimable balance across any streams" });
+      return;
+    }
+    setWithdrawingAll(true);
+    try {
+      const tx = new Transaction();
+      for (const stream of withdrawable) {
+        tx.moveCall({
+          target: `${PACKAGE_ID}::stream::withdraw`,
+          typeArguments: ["0x2::sui::SUI"],
+          arguments: [
+            tx.object(stream.streamId),
+            tx.object("0x6"),
+          ],
+        });
+      }
+      const result = await dAppKit.signAndExecuteTransaction({ transaction: tx });
+      console.log(`[withdraw] Bulk withdraw tx: ${(result as any)?.digest}`);
+      addToast({
+        variant: "success",
+        title: "Bulk withdrawal successful",
+        message: `Withdrew from ${withdrawable.length} streams (${providerStreams.totalClaimableSui.toFixed(6)} SUI total)`,
+      });
+      fetchProviderStreams();
+      fetchProviders();
+    } catch (err: any) {
+      addToast({
+        variant: "error",
+        title: "Bulk withdrawal failed",
+        message: err?.message || "Transaction failed",
+      });
+    } finally {
+      setWithdrawingAll(false);
+    }
+  };
 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -659,7 +778,7 @@ export default function ProviderPage({
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp className="w-4 h-4 text-emerald-600" />
                 <span className="text-xs font-sans text-stone-400 font-medium">
-                  Earnings
+                  Earnings Summary
                 </span>
               </div>
               <div className="text-center py-4">
@@ -667,7 +786,7 @@ export default function ProviderPage({
                   {totalEarnedSui.toFixed(4)}
                 </div>
                 <div className="text-xs font-mono text-stone-400">
-                  SUI earned
+                  SUI earned (off-chain)
                 </div>
               </div>
               <div className="border-t border-stone-200 pt-3 mt-3">
@@ -683,6 +802,129 @@ export default function ProviderPage({
                     {depletedConsumers.length}
                   </span>
                 </div>
+              </div>
+            </section>
+
+            {/* Withdraw Earnings Panel */}
+            <section className="p-4 bg-[#FAF9F6] border border-stone-200 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <CircleDollarSign className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-sans text-stone-400 font-medium">
+                    Withdraw Earnings
+                  </span>
+                </div>
+                <button
+                  onClick={() => fetchProviderStreams()}
+                  disabled={loadingStreams}
+                  className="p-1 text-stone-400 hover:text-[#8C2C16] transition-colors"
+                  title="Refresh on-chain balances"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loadingStreams ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {loadingStreams ? (
+                <div className="py-4 text-center">
+                  <RefreshCw className="w-4 h-4 text-stone-300 animate-spin mx-auto mb-2" />
+                  <span className="text-[10px] text-stone-400">Reading on-chain balances...</span>
+                </div>
+              ) : providerStreams && providerStreams.streams.length > 0 ? (
+                <>
+                  {/* Total claimable */}
+                  <div className="text-center py-3 mb-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <div className="font-mono text-xl font-bold text-emerald-700">
+                      {providerStreams.totalClaimableSui < 0.001
+                        ? `${(providerStreams.totalClaimableSui * 1_000_000).toFixed(0)} μSUI`
+                        : `${providerStreams.totalClaimableSui.toFixed(6)} SUI`}
+                    </div>
+                    <div className="text-[10px] font-mono text-emerald-600 mt-0.5">
+                      {providerStreams.totalOnChainBalanceSui.toFixed(6)} SUI on-chain total
+                    </div>
+                  </div>
+
+                  {/* Withdraw All button */}
+                  {providerStreams.totalClaimableMist > 0 && (
+                    <button
+                      onClick={handleWithdrawAll}
+                      disabled={withdrawingAll || !isWalletConnected}
+                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-lg text-xs font-sans font-bold transition-all flex items-center justify-center gap-2 mb-3"
+                    >
+                      {withdrawingAll ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          Withdrawing...
+                        </>
+                      ) : (
+                        <>
+                          <ArrowDownToLine className="w-3 h-3" />
+                          Withdraw All ({providerStreams.totalClaimableSui.toFixed(6)} SUI)
+                        </>
+                      )}
+                    </button>
+                  )}
+
+                  {/* Per-stream breakdown */}
+                  <div className="space-y-2">
+                    {providerStreams.streams.map((stream) => (
+                      <div
+                        key={stream.streamId}
+                        className="p-2.5 bg-white border border-stone-200 rounded-lg"
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Radio className={`w-3 h-3 shrink-0 ${stream.status === 'streaming' ? 'text-emerald-500' : 'text-stone-400'}`} />
+                            <span className="text-[10px] font-sans font-bold text-[#1C1A17] truncate">
+                              {stream.agentName}
+                            </span>
+                          </div>
+                          <span className={`text-[10px] font-mono font-bold ${stream.claimableMist > 0 ? 'text-emerald-700' : 'text-stone-400'}`}>
+                            {stream.claimableSui < 0.001 && stream.claimableMist > 0
+                              ? `${stream.claimableMist} μ`
+                              : `${stream.claimableSui.toFixed(6)} SUI`}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] font-mono text-stone-400 mb-1.5">
+                          <span>Balance: {stream.onChainBalanceSui.toFixed(6)} SUI</span>
+                          <span>{stream.status === 'streaming' ? '● Live' : '○ Ended'}</span>
+                        </div>
+                        {stream.claimableMist > 0 && (
+                          <button
+                            onClick={() => handleWithdrawStream(stream)}
+                            disabled={withdrawingStreamId === stream.streamId || !isWalletConnected}
+                            className="w-full py-1.5 text-[10px] font-sans font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded transition-all flex items-center justify-center gap-1 disabled:opacity-40"
+                          >
+                            {withdrawingStreamId === stream.streamId ? (
+                              <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                            ) : (
+                              <Download className="w-2.5 h-2.5" />
+                            )}
+                            {withdrawingStreamId === stream.streamId ? 'Withdrawing...' : 'Withdraw'}
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="py-4 text-center">
+                  <CircleDollarSign className="w-8 h-8 text-stone-200 mx-auto mb-2" />
+                  <p className="text-[10px] font-sans text-stone-400">
+                    No streams found for this provider
+                  </p>
+                  <p className="text-[9px] text-stone-300 mt-1">
+                    Streams appear here when agents access your API
+                  </p>
+                </div>
+              )}
+
+              {/* Withdrawal info */}
+              <div className="mt-3 pt-3 border-t border-stone-100">
+                <p className="text-[9px] font-mono text-stone-400 leading-relaxed">
+                  Withdrawals are executed on-chain via the{' '}<span className="text-[#8C2C16] font-bold">stream::withdraw</span>{' '}
+                  Move function. Your connected wallet signs the transaction. Claimable
+                  amounts accrue at your configured rate per second.
+                </p>
               </div>
             </section>
 

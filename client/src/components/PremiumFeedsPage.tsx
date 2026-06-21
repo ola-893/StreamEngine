@@ -1,378 +1,199 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
-import { Transaction } from "@mysten/sui/transactions";
 import { API_BASE } from "../types";
-import { useToast } from "../lib/toast-context";
 import {
-  Wallet,
-  AlertTriangle,
   Loader2,
-  Check,
-  X,
-  Rss,
-  Plus,
   Database,
+  Plus,
+  ExternalLink,
+  Zap,
+  Globe,
+  Tag,
 } from "lucide-react";
 
-interface PremiumFeed {
+interface RegisteredProvider {
   id: string;
   name: string;
-  provider: string;
-  endpoint: string;
   description: string;
-  icon: string;
-  category: string;
+  endpoint: string;
+  websiteUrl: string;
   ratePerSecond: number;
+  category: string;
+  providerAddress: string;
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
-  'Data Feed': '📊',
-  'Social Media': '💬',
-  'Finance': '📈',
-  'Compute': '⚡',
-  'API': '🔗',
-  'General': '📦',
+  "Data Feed": "📊",
+  "Social Media": "💬",
+  Finance: "📈",
+  Research: "🔬",
+  Compute: "⚡",
+  API: "🔗",
+  General: "📦",
 };
-
-function providerToFeed(p: any): PremiumFeed {
-  return {
-    id: p.id,
-    name: p.name,
-    provider: p.name,
-    endpoint: p.endpoint,
-    description: p.description || `${p.name} — ${((p.ratePerSecond ?? 100_000) / 1_000_000_000).toFixed(6)} SUI/sec`,
-    icon: CATEGORY_ICONS[p.category] || '📦',
-    category: p.category || 'General',
-    ratePerSecond: p.ratePerSecond,
-  };
-}
-
-interface PaymentRequired {
-  provider: string;
-  providerId?: string;
-  ratePerSecond: string;
-  ratePerSecondMist: number;
-  minimumDeposit: string;
-  packageId: string;
-  instructions: string;
-}
-
-interface FeedState {
-  status: "idle" | "loading" | "payment_required" | "paying" | "success" | "error";
-  paymentInfo?: PaymentRequired;
-  data?: any;
-  error?: string;
-  txDigest?: string;
-}
 
 export default function PremiumFeedsPage() {
   const navigate = useNavigate();
-  const currentAccount = useCurrentAccount();
-  const isWalletConnected = !!currentAccount;
-  const dAppKit = useDAppKit();
-  const { addToast } = useToast();
+  const [providers, setProviders] = useState<RegisteredProvider[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [feeds, setFeeds] = useState<PremiumFeed[]>([]);
-  const [feedsLoading, setFeedsLoading] = useState(true);
-  const [feedStates, setFeedStates] = useState<Record<string, FeedState>>({});
-
-  const fetchFeeds = useCallback(async () => {
+  const fetchProviders = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/providers`);
       const data = await res.json();
-      setFeeds((data.providers || []).map(providerToFeed));
+      setProviders(data.providers || []);
     } catch {
-      setFeeds([]);
+      setProviders([]);
     } finally {
-      setFeedsLoading(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchFeeds();
-  }, [fetchFeeds]);
-
-  const updateFeedState = (feedId: string, state: Partial<FeedState>) => {
-    setFeedStates((prev) => ({ ...prev, [feedId]: { ...prev[feedId], ...state } }));
-  };
-
-  const handleFetch = async (feed: PremiumFeed) => {
-    if (!isWalletConnected) return;
-
-    updateFeedState(feed.id, { status: "loading", error: undefined, data: undefined });
-
-    try {
-      const res = await fetch(`${API_BASE}${feed.endpoint}`);
-
-      if (res.status === 402) {
-        const body = await res.json();
-        updateFeedState(feed.id, {
-          status: "payment_required",
-          paymentInfo: body.x402,
-        });
-        return;
-      }
-
-      if (!res.ok) {
-        throw new Error(`Request failed: ${res.status}`);
-      }
-
-      const data = await res.json();
-      updateFeedState(feed.id, { status: "success", data });
-      addToast({ variant: "success", title: "Feed retrieved", message: `${feed.name} data loaded successfully.` });
-    } catch (err: any) {
-      updateFeedState(feed.id, { status: "error", error: err.message || "Request failed" });
-      addToast({ variant: "error", title: "Fetch failed", message: err.message || "Request failed" });
-    }
-  };
-
-  const handlePayAndFetch = async (feed: PremiumFeed) => {
-    const state = feedStates[feed.id];
-    if (!state?.paymentInfo || !currentAccount?.address) return;
-
-    updateFeedState(feed.id, { status: "paying", error: undefined });
-
-    try {
-      const amountMist = Number(state.paymentInfo.minimumDeposit);
-
-      // Build a direct SUI transfer to the provider
-      const tx = new Transaction();
-      const [coin] = tx.splitCoins(tx.gas, [amountMist]);
-      tx.transferObjects([coin], tx.pure.address(state.paymentInfo.provider));
-
-      const result = await dAppKit.signAndExecuteTransaction({
-        transaction: tx,
-      });
-
-      if (result.$kind !== "Transaction") {
-        throw new Error("Transaction failed");
-      }
-
-      const txDigest = result.Transaction.digest;
-      updateFeedState(feed.id, { txDigest });
-
-      // Retry the request with the tx digest header
-      const res = await fetch(`${API_BASE}${feed.endpoint}`, {
-        headers: { "X-StreamEngine-Tx-Digest": txDigest },
-      });
-
-      if (!res.ok) {
-        throw new Error(`Retry failed: ${res.status}`);
-      }
-
-      const data = await res.json();
-      updateFeedState(feed.id, { status: "success", data });
-      addToast({ variant: "success", title: "Payment successful", message: `${feed.name} data unlocked.` });
-    } catch (err: any) {
-      updateFeedState(feed.id, { status: "error", error: err.message || "Payment failed" });
-      addToast({ variant: "error", title: "Payment failed", message: err.message || "Transaction could not be completed." });
-    }
-  };
-
-  const handleDismiss = (feedId: string) => {
-    updateFeedState(feedId, { status: "idle", paymentInfo: undefined, error: undefined, data: undefined, txDigest: undefined });
-  };
-
-  const renderFeedCard = (feed: PremiumFeed) => {
-    const state = feedStates[feed.id] || { status: "idle" };
-
-    return (
-      <div key={feed.id} className="border border-stone-200 bg-white p-6 shadow-sm flex flex-col gap-4">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#1C1A17] text-[#FAF9F5] flex items-center justify-center font-mono text-xs font-bold shrink-0">
-              {feed.icon}
-            </div>
-            <div>
-              <h3 className="font-sans font-bold text-lg text-[#1C1A17]">{feed.name}</h3>
-              <span className="text-xs font-sans text-stone-400">{feed.provider}</span>
-            </div>
-          </div>
-          <span className="px-2.5 py-0.5 border border-amber-300 text-amber-800 bg-amber-50 font-sans text-[10px] font-bold uppercase shrink-0">
-            Premium
-          </span>
-        </div>
-
-        <p className="text-sm font-sans text-stone-500 leading-relaxed">{feed.description}</p>
-
-        {/* Content area based on state */}
-        {state.status === "idle" && (
-          <button
-            onClick={() => handleFetch(feed)}
-            disabled={!isWalletConnected}
-            className="w-full py-3 bg-[#1C1A17] hover:bg-[#2E2E38] disabled:opacity-40 disabled:cursor-not-allowed text-[#FAF9F5] font-sans text-sm font-bold rounded-full transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
-          >
-            <Rss className="w-4 h-4" />
-            Fetch Feed Data
-          </button>
-        )}
-
-        {state.status === "loading" && (
-          <div className="flex items-center justify-center gap-2 py-3 text-sm font-sans text-stone-500">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Requesting feed...
-          </div>
-        )}
-
-        {state.status === "payment_required" && state.paymentInfo && (
-          <div className="flex flex-col gap-3">
-            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col gap-2">
-              <div className="flex items-center gap-2 text-amber-800 font-sans text-sm font-bold">
-                <AlertTriangle className="w-4 h-4" />
-                402 Payment Required
-              </div>
-              <div className="flex flex-col gap-1.5 text-xs font-sans text-amber-900/80">
-                <div className="flex justify-between">
-                  <span>Rate:</span>
-                  <span className="font-mono font-bold">{state.paymentInfo.ratePerSecond} SUI/sec</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Provider:</span>
-                  <span className="font-mono truncate max-w-[180px]" title={state.paymentInfo.provider}>
-                    {state.paymentInfo.provider.slice(0, 10)}...{state.paymentInfo.provider.slice(-4)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Minimum deposit:</span>
-                  <span className="font-mono font-bold">
-                    {(Number(state.paymentInfo.minimumDeposit) / 1_000_000_000).toFixed(4)} SUI
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => handlePayAndFetch(feed)}
-                className="flex-1 py-3 bg-[#8C2C16] hover:bg-[#A63A23] text-white font-sans text-sm font-bold rounded-full transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
-              >
-                <Wallet className="w-4 h-4" />
-                Pay & Fetch
-              </button>
-              <button
-                onClick={() => handleDismiss(feed.id)}
-                className="px-4 py-3 border border-stone-300 hover:bg-stone-50 text-stone-600 font-sans text-sm font-bold rounded-full transition-all cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {state.status === "paying" && (
-          <div className="flex items-center justify-center gap-2 py-3 text-sm font-sans text-[#8C2C16]">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            Signing transaction...
-          </div>
-        )}
-
-        {state.status === "success" && state.data && (
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 text-emerald-700 font-sans text-sm font-bold">
-              <Check className="w-4 h-4" />
-              Feed Data Retrieved
-              {state.txDigest && (
-                <span className="text-[10px] font-mono text-stone-400 font-normal ml-auto">
-                  TX: {state.txDigest.slice(0, 10)}...
-                </span>
-              )}
-            </div>
-            <div className="border border-stone-200 bg-[#FAF9F5] p-4 rounded-xl max-h-[240px] overflow-y-auto custom-scrollbar">
-              <pre className="text-[11px] font-mono text-stone-800 leading-relaxed whitespace-pre-wrap">
-                <code>{JSON.stringify(state.data, null, 2)}</code>
-              </pre>
-            </div>
-            <button
-              onClick={() => handleDismiss(feed.id)}
-              className="w-full py-2 border border-stone-200 hover:bg-stone-50 text-stone-500 font-sans text-xs font-bold rounded-full transition-all cursor-pointer"
-            >
-              Clear & Re-fetch
-            </button>
-          </div>
-        )}
-
-        {state.status === "error" && (
-          <div className="flex flex-col gap-3">
-            <div className="p-3 bg-red-50 border border-red-200 text-xs font-sans text-red-700 rounded-xl">
-              {state.error}
-            </div>
-            <button
-              onClick={() => handleDismiss(feed.id)}
-              className="w-full py-2 border border-stone-200 hover:bg-stone-50 text-stone-500 font-sans text-xs font-bold rounded-full transition-all cursor-pointer"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
+    fetchProviders();
+  }, [fetchProviders]);
 
   return (
     <div className="pb-16">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-sans text-stone-500 mb-6">
-        <span onClick={() => navigate("/")} className="hover:text-black cursor-pointer transition-colors font-semibold">Flowgate</span>
+        <span
+          onClick={() => navigate("/")}
+          className="hover:text-black cursor-pointer transition-colors font-semibold"
+        >
+          Flowgate
+        </span>
         <span>/</span>
-        <span className="text-stone-400">Premium Feeds</span>
+        <span className="text-stone-400">Marketplace</span>
       </div>
 
       {/* Header */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 mb-10 border-b border-stone-300 pb-6">
         <div>
-          <h1 className="font-sans text-3xl font-bold text-[#1C1A17]">Premium Feeds</h1>
+          <h1 className="font-sans text-3xl font-bold text-[#1C1A17]">
+            Marketplace
+          </h1>
           <p className="text-sm text-stone-500 mt-1">
-            Access x402-protected data feeds by signing micropayment transactions with your Sui wallet.
+            Browse API endpoints registered by providers. Agents pay per-second
+            via Sui payment streams to access data.
           </p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {!isWalletConnected && (
-            <div className="px-4 py-2 bg-amber-50 border border-amber-200 text-xs font-sans text-amber-800 font-medium rounded-full">
-              Connect wallet to access premium feeds
-            </div>
-          )}
-          <button onClick={() => navigate("/register")} className="px-5 py-2.5 bg-[#8C2C16] hover:bg-[#A63A23] text-white rounded-full text-sm font-sans font-bold transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-95 cursor-pointer shrink-0">
-            <Plus className="w-4 h-4" />Register New Endpoint
-          </button>
-        </div>
+        <button
+          onClick={() => navigate("/register")}
+          className="px-5 py-2.5 bg-[#8C2C16] hover:bg-[#A63A23] text-white rounded-full text-sm font-sans font-bold transition-all flex items-center gap-2 shadow-md hover:shadow-lg active:scale-95 cursor-pointer shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          Register Endpoint
+        </button>
       </div>
 
-      {/* How it works */}
-      <div className="mb-8 p-5 bg-[#FAF9F5] border border-stone-200 rounded-2xl flex flex-col gap-3">
-        <span className="text-xs font-sans text-[#8C2C16] font-bold uppercase tracking-wider">How x402 Payment Works</span>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-sans text-stone-600">
-          <div className="flex items-start gap-2">
-            <span className="w-5 h-5 rounded-full bg-[#1C1A17] text-[#FAF9F5] flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">1</span>
-            <span>Click <strong>Fetch Feed Data</strong> — the server returns HTTP 402 with payment requirements.</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="w-5 h-5 rounded-full bg-[#1C1A17] text-[#FAF9F5] flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">2</span>
-            <span>Review the rate and click <strong>Pay & Fetch</strong> — your wallet signs a SUI transfer to the provider.</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="w-5 h-5 rounded-full bg-[#1C1A17] text-[#FAF9F5] flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">3</span>
-            <span>The transaction digest is sent as proof of payment and the feed data is returned.</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Feed cards */}
-      {feedsLoading ? (
+      {/* Provider cards */}
+      {loading ? (
         <div className="flex items-center justify-center py-12 gap-3 text-sm font-sans text-stone-400">
           <Loader2 className="w-5 h-5 animate-spin" />
-          Loading marketplace feeds...
+          Loading marketplace...
         </div>
-      ) : feeds.length === 0 ? (
+      ) : providers.length === 0 ? (
         <div className="p-12 text-center">
           <Database className="w-10 h-10 text-stone-200 mx-auto mb-3" />
-          <p className="text-sm font-sans font-bold text-[#1C1A17]">No providers registered yet</p>
-          <p className="text-xs text-stone-400 mt-1">Register an endpoint to see it here.</p>
+          <p className="text-sm font-sans font-bold text-[#1C1A17]">
+            No providers registered yet
+          </p>
+          <p className="text-xs text-stone-400 mt-1 mb-4">
+            Register your first API endpoint to list it on the marketplace.
+          </p>
+          <button
+            onClick={() => navigate("/register")}
+            className="px-5 py-2.5 bg-[#8C2C16] hover:bg-[#A63A23] text-white rounded-full text-sm font-sans font-bold transition-all"
+          >
+            Register Endpoint
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {feeds.map(renderFeedCard)}
+          {providers.map((provider) => (
+            <div
+              key={provider.id}
+              className="border border-stone-200 bg-white p-6 shadow-sm flex flex-col gap-4 hover:border-[#8C2C16] hover:shadow-md transition-all"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#1C1A17] text-[#FAF9F5] flex items-center justify-center font-mono text-sm shrink-0">
+                    {CATEGORY_ICONS[provider.category] || "📦"}
+                  </div>
+                  <div>
+                    <h3 className="font-sans font-bold text-lg text-[#1C1A17]">
+                      {provider.name}
+                    </h3>
+                    <span className="text-[10px] font-sans text-stone-400 uppercase tracking-wider">
+                      {provider.category}
+                    </span>
+                  </div>
+                </div>
+                <span className="px-2.5 py-0.5 border border-emerald-300 text-emerald-700 bg-emerald-50 font-sans text-[10px] font-bold uppercase shrink-0">
+                  Live
+                </span>
+              </div>
+
+              {/* Description */}
+              <p className="text-sm font-sans text-stone-500 leading-relaxed">
+                {provider.description || "No description provided."}
+              </p>
+
+              {/* Details */}
+              <div className="flex flex-col gap-2 text-xs font-sans">
+                <div className="flex items-center justify-between py-2 border-t border-stone-100">
+                  <div className="flex items-center gap-1.5 text-stone-400">
+                    <Zap className="w-3 h-3" />
+                    <span>Rate</span>
+                  </div>
+                  <span className="font-mono font-bold text-[#8C2C16]">
+                    {provider.ratePerSecond.toLocaleString()} MIST/s
+                    <span className="text-stone-400 font-normal ml-1">
+                      ({(provider.ratePerSecond / 1_000_000_000).toFixed(6)}{" "}
+                      SUI/s)
+                    </span>
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-2 border-t border-stone-100">
+                  <div className="flex items-center gap-1.5 text-stone-400">
+                    <Globe className="w-3 h-3" />
+                    <span>Endpoint</span>
+                  </div>
+                  <span className="font-mono text-[10px] text-stone-600 truncate max-w-[180px]">
+                    {provider.endpoint}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-2 border-t border-stone-100">
+                  <div className="flex items-center gap-1.5 text-stone-400">
+                    <Tag className="w-3 h-3" />
+                    <span>Website</span>
+                  </div>
+                  <a
+                    href={provider.websiteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-[10px] text-[#8C2C16] hover:underline inline-flex items-center gap-0.5 truncate max-w-[160px]"
+                  >
+                    {provider.websiteUrl.replace(/^https?:\/\//, "").slice(0, 30)}
+                    <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Provider address */}
+              <div className="pt-2 border-t border-stone-100">
+                <span className="text-[9px] font-mono text-stone-400">
+                  Provider:{" "}
+                  {provider.providerAddress.slice(0, 10)}...
+                  {provider.providerAddress.slice(-4)}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

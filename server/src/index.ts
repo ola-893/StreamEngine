@@ -42,9 +42,19 @@ function decryptPrivateKey(encryptedData: string): string {
 }
 
 function getKeypairForAgent(agent: Agent): Ed25519Keypair {
-  const privateKeyBech32 = decryptPrivateKey(agent.encryptedPrivateKey);
-  const { secretKey } = decodeSuiPrivateKey(privateKeyBech32);
-  return Ed25519Keypair.fromSecretKey(secretKey);
+  try {
+    const privateKeyBech32 = decryptPrivateKey(agent.encryptedPrivateKey);
+    const { secretKey } = decodeSuiPrivateKey(privateKeyBech32);
+    return Ed25519Keypair.fromSecretKey(secretKey);
+  } catch (err: any) {
+    if (err?.message?.includes('bad decrypt') || err?.code === 'ERR_OSSL_BAD_DECRYPT') {
+      throw new Error(
+        'AGENT_KEY_SECRET mismatch — this agent was encrypted with a different secret. '
+        + 'Ensure the same AGENT_KEY_SECRET env var is set that was used when the agent was created.'
+      );
+    }
+    throw err;
+  }
 }
 
 // ============================================================
@@ -82,6 +92,7 @@ interface Agent {
   encryptedPrivateKey: string;
   activeStreams: AgentStream[];
   createdAt: string;
+  ownerAddress?: string | null;
 }
 
 function toPublicAgent(agent: any) {
@@ -94,7 +105,7 @@ function toPublicAgent(agent: any) {
 // ============================================================
 
 app.post('/api/agents', (req, res) => {
-  const { name, description, purpose, budgetMist } = req.body;
+  const { name, description, purpose, budgetMist, ownerAddress } = req.body;
   if (!name || !purpose || budgetMist === undefined) {
     return res.status(400).json({ error: 'Missing required fields: name, purpose, budgetMist' });
   }
@@ -112,7 +123,8 @@ app.post('/api/agents', (req, res) => {
     walletAddress: address,
     encryptedPrivateKey,
     activeStreams: [],
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    ownerAddress: ownerAddress || null,
   };
   
   saveAgent(newAgent);
@@ -121,7 +133,9 @@ app.post('/api/agents', (req, res) => {
 });
 
 app.get('/api/agents', (req, res) => {
-  res.json(getAllAgents().map(toPublicAgent));
+  const { ownerAddress } = req.query;
+  const agents = getAllAgents(typeof ownerAddress === 'string' ? ownerAddress : undefined);
+  res.json(agents.map(toPublicAgent));
 });
 
 app.delete('/api/agents/:id', (req, res) => {
@@ -684,6 +698,81 @@ app.post('/api/agents/:id/streams/:streamId/fetch-data', async (req, res) => {
   }
 });
 
+app.post('/api/agents/:id/withdraw', async (req, res) => {
+  try {
+    const agent = getAgent(req.params.id);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+    const { ownerAddress } = req.body;
+    if (!ownerAddress) return res.status(400).json({ error: 'ownerAddress required — pass your wallet address' });
+
+    // Verify the caller owns this agent
+    if (agent.ownerAddress && agent.ownerAddress !== ownerAddress) {
+      return res.status(403).json({ error: 'Not authorized — owner address mismatch' });
+    }
+
+    console.log(`[withdraw] Agent "${agent.name}" (${agent.id}) — withdrawing to ${ownerAddress}`);
+
+    // Get agent's full SUI balance from chain
+    const coins = await suiClient.getCoins({ owner: agent.walletAddress, coinType: '0x2::sui::SUI' });
+    const totalBalance = coins.data.reduce((sum, c) => sum + parseInt(c.balance), 0);
+    console.log(`[withdraw] Agent wallet balance: ${totalBalance} MIST (${totalBalance / 1_000_000_000} SUI)`);
+
+    if (totalBalance === 0) {
+      return res.status(400).json({ error: 'Agent wallet is empty — nothing to withdraw', balanceMist: 0, balanceSui: 0 });
+    }
+
+    // Leave a small gas reserve (0.01 SUI = 10_000_000 MIST) so the wallet stays valid
+    const gasReserve = 10_000_000;
+    const withdrawAmount = Math.max(0, totalBalance - gasReserve);
+
+    if (withdrawAmount <= 0) {
+      return res.status(400).json({
+        error: 'Balance too low to withdraw after gas reserve',
+        balanceMist: totalBalance,
+        balanceSui: totalBalance / 1_000_000_000,
+        gasReserveMist: gasReserve,
+      });
+    }
+
+    console.log(`[withdraw] Withdrawing ${withdrawAmount} MIST (${withdrawAmount / 1_000_000_000} SUI) → ${ownerAddress}`);
+
+    const keypair = getKeypairForAgent(agent);
+    const { Transaction } = await import('@mysten/sui/transactions');
+    const tx = new Transaction();
+
+    const [coin] = tx.splitCoins(tx.gas, [withdrawAmount]);
+    tx.transferObjects([coin], tx.pure.address(ownerAddress));
+
+    const result = await suiClient.signAndExecuteTransaction({
+      transaction: tx,
+      signer: keypair,
+      options: { showEffects: true },
+    });
+
+    await suiClient.waitForTransaction({ digest: result.digest });
+    console.log(`[withdraw] ✓ Withdrawal complete — tx: ${result.digest}`);
+
+    return res.json({
+      success: true,
+      digest: result.digest,
+      withdrawnMist: withdrawAmount,
+      withdrawnSui: withdrawAmount / 1_000_000_000,
+      remainingMist: totalBalance - withdrawAmount,
+      remainingSui: (totalBalance - withdrawAmount) / 1_000_000_000,
+      toAddress: ownerAddress,
+    });
+  } catch (error: any) {
+    const msg = error?.message || String(error);
+    console.error('[withdraw] Error:', msg);
+    if (msg.includes('Insufficient') || msg.includes('not enough') || msg.includes('Balance')) {
+      res.status(402).json({ error: 'Insufficient balance for withdrawal', message: msg });
+    } else {
+      res.status(500).json({ error: 'Withdrawal failed', message: msg });
+    }
+  }
+});
+
 app.post('/api/agents/:id/fund-demo', async (req, res) => {
   try {
     const agent = getAgent(req.params.id);
@@ -890,110 +979,105 @@ app.put('/api/providers/:id', (req, res) => {
   res.json(updated);
 });
 
+/**
+ * GET /api/providers/:id/streams
+ * Returns all streams targeting this provider with live on-chain balance
+ * and claimable amounts — used by the provider withdrawal UI.
+ */
+app.get('/api/providers/:id/streams', async (req, res) => {
+  try {
+    const provider = getProvider(req.params.id);
+    if (!provider) return res.status(404).json({ error: 'Provider not found' });
+
+    const allAgents = getAllAgents();
+    const nowMs = Date.now();
+    const streams: any[] = [];
+
+    for (const agent of allAgents) {
+      for (const stream of agent.activeStreams) {
+        if (stream.endpoint !== provider.endpoint) continue;
+
+        // Read live on-chain state
+        let balanceMist = 0;
+        let ratePerSecondMist = stream.ratePerSecondMist;
+        let sender = agent.walletAddress;
+        let lastWithdrawalMs = 0; // default to 0 so claimable shows 0 if on-chain read fails
+        let chainError: string | null = null;
+
+        try {
+          const obj = await suiClient.getObject({
+            id: stream.streamId,
+            options: { showContent: true },
+          });
+          const fields = (obj.data?.content as any)?.fields;
+          if (fields) {
+            balanceMist = Number(extractStreamBalanceMist(fields));
+            if (fields.rate_per_second) ratePerSecondMist = Number(fields.rate_per_second);
+            if (fields.sender) sender = fields.sender;
+            if (fields.last_withdrawal_ms) lastWithdrawalMs = Number(fields.last_withdrawal_ms);
+          }
+        } catch (err: any) {
+          chainError = err?.message || 'Failed to read on-chain state';
+        }
+
+        // Calculate claimable: elapsed since last withdrawal * rate
+        const elapsedSec = Math.max(0, Math.floor((nowMs - lastWithdrawalMs) / 1000));
+        const claimableMist = Math.min(elapsedSec * ratePerSecondMist, balanceMist);
+
+        const elapsedSecSinceOpen = Math.floor((nowMs - new Date(stream.openedAt).getTime()) / 1000);
+        const totalDurationSec = stream.durationSeconds || 0;
+        const streamStatus = totalDurationSec > 0 && elapsedSecSinceOpen >= totalDurationSec ? 'depleted' : (balanceMist > 0 ? 'streaming' : 'depleted');
+
+        streams.push({
+          streamId: stream.streamId,
+          agentId: agent.id,
+          agentName: agent.name,
+          agentPurpose: agent.purpose,
+          endpoint: stream.endpoint,
+          ratePerSecondMist,
+          durationSeconds: totalDurationSec,
+          openedAt: stream.openedAt,
+          depositMist: ratePerSecondMist * totalDurationSec,
+          // On-chain live data
+          onChainBalanceMist: balanceMist,
+          onChainBalanceSui: balanceMist / 1_000_000_000,
+          claimableMist,
+          claimableSui: claimableMist / 1_000_000_000,
+          sender,
+          recipient: provider.providerAddress,
+          lastWithdrawalMs,
+          status: streamStatus,
+          chainError,
+        });
+      }
+    }
+
+    // Totals
+    const totalClaimableMist = streams.reduce((sum, s) => sum + s.claimableMist, 0);
+    const totalOnChainBalanceMist = streams.reduce((sum, s) => sum + s.onChainBalanceMist, 0);
+
+    return res.json({
+      providerId: provider.id,
+      providerAddress: provider.providerAddress,
+      totalStreams: streams.length,
+      totalClaimableMist,
+      totalClaimableSui: totalClaimableMist / 1_000_000_000,
+      totalOnChainBalanceMist,
+      totalOnChainBalanceSui: totalOnChainBalanceMist / 1_000_000_000,
+      streams,
+    });
+  } catch (error: any) {
+    console.error('[providers/:id/streams] Error:', error?.message || error);
+    res.status(500).json({ error: 'Failed to fetch provider streams', message: error?.message || String(error) });
+  }
+});
+
 /** Health check */
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'FlowGate Gateway', providers: getAllProviders().length });
 });
 
-// ============================================================
-//  PREMIUM ENDPOINTS — Protected by x402 Payment Required
-// ============================================================
 
-app.get('/api/premium/x-social/feed', requireX402Payment, (req, res) => {
-  const auth = (req as any).streamEngineAuth;
-  console.log(`[Gateway] Serving X scrape feed to agent ${auth?.agentAddress?.substring(0, 10) || 'unknown'}...`);
-  res.json({
-    provider: 'X (Twitter)',
-    websiteUrl: 'https://x.com',
-    endpoint: '/api/premium/x-social/feed',
-    scrapedAt: new Date().toISOString(),
-    data: [
-      {
-        author: '@sui_network',
-        content: 'Programmable payment streams unlock a new access model for autonomous agents.',
-        likes: 18420,
-        timestamp: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
-      },
-      {
-        author: '@agentops',
-        content: 'Scraping budgets should be negotiated in real time, not settled in monthly invoices.',
-        likes: 9312,
-        timestamp: new Date(Date.now() - 11 * 60 * 1000).toISOString(),
-      },
-      {
-        author: '@webmonetize',
-        content: 'Site owners need a native way to meter AI crawler access without blocking useful agents.',
-        likes: 5621,
-        timestamp: new Date(Date.now() - 18 * 60 * 1000).toISOString(),
-      },
-    ],
-  });
-});
-
-app.get('/api/premium/reddit/feed', requireX402Payment, (req, res) => {
-  const auth = (req as any).streamEngineAuth;
-  console.log(`[Gateway] Serving Reddit scrape feed to agent ${auth?.agentAddress?.substring(0, 10) || 'unknown'}...`);
-  res.json({
-    provider: 'Reddit',
-    websiteUrl: 'https://reddit.com',
-    endpoint: '/api/premium/reddit/feed',
-    scrapedAt: new Date().toISOString(),
-    data: [
-      {
-        subreddit: 'r/MachineLearning',
-        title: 'Payment streams for crawler access: what would fair pricing look like?',
-        upvotes: 4217,
-        top_comment: 'The interesting part is revocation. A dead stream should mean no more access.',
-        url: 'https://reddit.com/r/MachineLearning/comments/streamengine',
-      },
-      {
-        subreddit: 'r/Sui',
-        title: 'Shared objects make per-second web access controls surprisingly practical',
-        upvotes: 1288,
-        top_comment: 'This is the first x402-style demo I have seen with real Sui objects.',
-        url: 'https://reddit.com/r/Sui/comments/shared_streams',
-      },
-      {
-        subreddit: 'r/webscraping',
-        title: 'Would you pay per second for premium site scraping access?',
-        upvotes: 953,
-        top_comment: 'If it avoids brittle proxy games and has clear limits, yes.',
-        url: 'https://reddit.com/r/webscraping/comments/pay_per_second',
-      },
-    ],
-  });
-});
-
-app.get('/api/premium/bloomberg/feed', requireX402Payment, (req, res) => {
-  const auth = (req as any).streamEngineAuth;
-  console.log(`[Gateway] Serving Bloomberg scrape feed to agent ${auth?.agentAddress?.substring(0, 10) || 'unknown'}...`);
-  res.json({
-    provider: 'Bloomberg',
-    websiteUrl: 'https://bloomberg.com',
-    endpoint: '/api/premium/bloomberg/feed',
-    scrapedAt: new Date().toISOString(),
-    data: [
-      {
-        headline: 'AI infrastructure spending lifts cloud guidance across megacap earnings',
-        summary: 'Executives pointed to sustained demand from autonomous agents and data-heavy model workflows.',
-        ticker: 'MSFT',
-        published_at: new Date(Date.now() - 9 * 60 * 1000).toISOString(),
-      },
-      {
-        headline: 'Treasury yields edge lower as traders price a slower policy path',
-        summary: 'Bond desks cited softer labor data and lower inflation breakevens in early New York trading.',
-        ticker: 'US10Y',
-        published_at: new Date(Date.now() - 22 * 60 * 1000).toISOString(),
-      },
-      {
-        headline: 'Semiconductor suppliers rally on stronger-than-expected order backlog',
-        summary: 'Analysts said inference workloads are broadening demand beyond flagship GPU vendors.',
-        ticker: 'NVDA',
-        published_at: new Date(Date.now() - 37 * 60 * 1000).toISOString(),
-      },
-    ],
-  });
-});
 
 // ============================================================
 //  DYNAMIC PROXY — Generic x402-gated proxy for any registered provider
@@ -1071,30 +1155,16 @@ app.all('/api/premium/*', requireX402Payment, async (req, res) => {
 // ============================================================
 
 app.listen(PORT, () => {
-  // Always ensure providers exist with correct rates
-  const DEMO_PROVIDER_ADDRESS = '0x0000000000000000000000000000000000000000000000000000000000001234';
-  const existingProviders = getAllProviders();
-  const providerDefaults = [
-    { id: 'x-social', name: 'X (Twitter)', description: 'Real-time posts, trending topics, and human interactions from X.com', websiteUrl: 'https://x.com', endpoint: '/api/premium/x-social/feed', ratePerSecond: 100_000, category: 'Social Media' },
-    { id: 'reddit', name: 'Reddit', description: 'Upvoted threads, community discussions, and niche subreddit data', websiteUrl: 'https://reddit.com', endpoint: '/api/premium/reddit/feed', ratePerSecond: 100_000, category: 'Social Media' },
-    { id: 'bloomberg', name: 'Bloomberg', description: 'Proprietary financial news, earnings call transcripts, and market commentary', websiteUrl: 'https://bloomberg.com', endpoint: '/api/premium/bloomberg/feed', ratePerSecond: 100_000, category: 'Finance' },
-  ];
-  for (const def of providerDefaults) {
-    const existing = existingProviders.find(p => p.id === def.id);
-    if (!existing) {
-      saveProvider({ ...def, providerAddress: DEMO_PROVIDER_ADDRESS });
-    } else if (existing.ratePerSecond !== def.ratePerSecond) {
-      // Update rate if it changed
-      saveProvider({ ...existing, ratePerSecond: def.ratePerSecond });
-    }
-  }
-
   const providers = getAllProviders();
   console.log(`\n🚀 FlowGate Gateway listening on http://localhost:${PORT}`);
-  console.log(`\n📋 Registry: ${providers.length} websites listed`);
-  providers.forEach(p => {
-    console.log(`   → ${p.name} | ${p.ratePerSecond} MIST/sec | GET ${p.endpoint}`);
-  });
-  console.log(`\n🔒 All premium endpoints return 402 Payment Required without a valid stream.`);
-  console.log(`📖 Browse listed websites: GET /api/providers\n`);
+  if (providers.length > 0) {
+    console.log(`\n📋 Registry: ${providers.length} registered providers`);
+    providers.forEach(p => {
+      console.log(`   → ${p.name} | ${p.ratePerSecond} MIST/sec | ${p.endpoint}`);
+    });
+  } else {
+    console.log(`\n📋 Registry: empty — register providers via POST /api/providers`);
+  }
+  console.log(`\n🔒 All /api/premium/* requests require a valid payment stream.`);
+  console.log(`📖 List providers: GET /api/providers\n`);
 });

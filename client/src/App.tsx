@@ -50,7 +50,10 @@ export default function App() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/agents`);
+      const url = walletAddress
+        ? `${API_BASE}/api/agents?ownerAddress=${encodeURIComponent(walletAddress)}`
+        : `${API_BASE}/api/agents`;
+      const res = await fetch(url);
       if (res.ok) {
         setServerReachable(true);
         const data = await res.json();
@@ -75,7 +78,7 @@ export default function App() {
     } finally {
       setAgentsLoaded(true);
     }
-  }, []);
+  }, [walletAddress]);
 
   useEffect(() => {
     fetchAgents();
@@ -459,6 +462,7 @@ export default function App() {
                   agents={agents}
                   onUpdateAgent={handleUpdateAgent}
                   onDeleteAgent={handleDeleteAgent}
+                  walletAddress={walletAddress}
                 />
               )
             } />
@@ -482,32 +486,7 @@ export default function App() {
   );
 }
 
-// Fallback demo endpoints when backend is offline
+// Fallback: no hardcoded demo endpoints — only user-registered providers
 function getDefaultEndpoints(): Endpoint[] {
-  return [
-    {
-      id: "x-social", name: "X (Twitter)", type: "api", status: "active",
-      price: 0.0001, unit: "sec of access", dataProvider: "X (Twitter)",
-      latency: 12, throughput: "42.4 MB/s", rating: 4.95, uptime: 99.99,
-      description: "Real-time posts, trending topics, and human interactions from X.com",
-      endpointUrl: "https://x.com", inputs: [], outputs: [],
-      apiKeyRequired: false, totalRequests: 140392, activeConsumers: 5, gasSui: 0.002
-    },
-    {
-      id: "reddit", name: "Reddit", type: "api", status: "active",
-      price: 0.0001, unit: "sec of access", dataProvider: "Reddit",
-      latency: 15, throughput: "38.2 MB/s", rating: 4.88, uptime: 99.85,
-      description: "Upvoted threads, community discussions, and niche subreddit data",
-      endpointUrl: "https://reddit.com", inputs: [], outputs: [],
-      apiKeyRequired: true, totalRequests: 89422, activeConsumers: 12, gasSui: 0.015
-    },
-    {
-      id: "bloomberg", name: "Bloomberg", type: "api", status: "active",
-      price: 0.0001, unit: "sec of access", dataProvider: "Bloomberg",
-      latency: 8, throughput: "120.8 MB/s", rating: 4.91, uptime: 99.72,
-      description: "Proprietary financial news, earnings call transcripts, and market commentary",
-      endpointUrl: "https://bloomberg.com", inputs: [], outputs: [],
-      apiKeyRequired: true, totalRequests: 110291, activeConsumers: 2, gasSui: 0.02
-    }
-  ];
+  return [];
 }

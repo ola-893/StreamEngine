@@ -29,6 +29,9 @@ ensure_deps() {
 ensure_deps server "server"
 ensure_deps client "client"
 
+# --- Ensure required env vars for local dev ---
+export AGENT_KEY_SECRET="${AGENT_KEY_SECRET:-dev-local-secret-do-not-use-in-production}"
+
 # --- Start server ---
 echo "🚀 Starting server (port 3001)..."
 (cd server && npm run dev) &

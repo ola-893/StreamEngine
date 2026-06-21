@@ -22,6 +22,7 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+
   CREATE TABLE IF NOT EXISTS providers (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -36,18 +37,25 @@ db.exec(`
   );
 `);
 
+// Migration: add owner_address column to agents if missing
+try {
+  db.prepare('SELECT owner_address FROM agents LIMIT 1').get();
+} catch {
+  db.exec('ALTER TABLE agents ADD COLUMN owner_address TEXT');
+}
+
 // Agent helpers
 export function saveAgent(agent: any): void {
   db.prepare(`
     INSERT OR REPLACE INTO agents
     (id, name, description, purpose, budget_mist, spent_mist, wallet_address,
-     encrypted_private_key, active_streams, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     encrypted_private_key, active_streams, created_at, owner_address)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     agent.id, agent.name, agent.description ?? '', agent.purpose,
     agent.budgetMist, agent.spentMist, agent.walletAddress,
     agent.encryptedPrivateKey, JSON.stringify(agent.activeStreams ?? []),
-    agent.createdAt
+    agent.createdAt, agent.ownerAddress ?? null
   );
 }
 
@@ -57,8 +65,16 @@ export function getAgent(id: string): any | null {
   return rowToAgent(row);
 }
 
-export function getAllAgents(): any[] {
-  const rows = db.prepare('SELECT * FROM agents ORDER BY created_at DESC').all() as any[];
+export function getAllAgents(ownerAddress?: string): any[] {
+  let query = 'SELECT * FROM agents';
+  const params: any[] = [];
+  if (ownerAddress) {
+    // Show agents owned by this wallet OR unclaimed agents (NULL owner)
+    query += ' WHERE owner_address = ? OR owner_address IS NULL';
+    params.push(ownerAddress);
+  }
+  query += ' ORDER BY created_at DESC';
+  const rows = db.prepare(query).all(...params) as any[];
   return rows.map(rowToAgent);
 }
 
@@ -74,6 +90,7 @@ function rowToAgent(row: any): any {
     encryptedPrivateKey: row.encrypted_private_key,
     activeStreams: JSON.parse(row.active_streams),
     createdAt: row.created_at,
+    ownerAddress: row.owner_address,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   closeAgentStream,
   startAgent,
   fundAgent,
+  withdrawAgent,
   deleteAgent,
   discoverProviders,
   AgentBalance,
@@ -29,7 +30,7 @@ import {
   Trash2,
   RefreshCw,
   Zap,
-
+  ArrowDownToLine,
   Send,
   Copy,
   Check,
@@ -95,6 +96,7 @@ interface AgentDetailPageProps {
   agents: Agent[];
   onUpdateAgent: (id: string, updates: Partial<Agent>) => void;
   onDeleteAgent: (id: string) => void;
+  walletAddress: string | null;
 }
 
 interface ActivityLogEntry {
@@ -112,6 +114,7 @@ export default function AgentDetailPage({
   agents,
   onUpdateAgent,
   onDeleteAgent,
+  walletAddress,
 }: AgentDetailPageProps) {
   const navigate = useNavigate();
   const { id: agentId } = useParams<{ id: string }>();
@@ -143,6 +146,9 @@ export default function AgentDetailPage({
   // Start modal with duration selector
   const [startModalOpen, setStartModalOpen] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState<number>(3600);
+
+  // Withdraw modal
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
 
   // Delete confirmation
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -435,6 +441,64 @@ export default function AgentDetailPage({
         variant: "error",
         title: "Close failed",
         message: err.message,
+      });
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    setLoadingAction("withdraw");
+    setActionError(null);
+    try {
+      if (!walletAddress) {
+        throw new Error("Connect your wallet first — owner address is required");
+      }
+      addLogEntry({
+        agentId: agent.id,
+        agentName,
+        type: "stream",
+        title: "Withdrawing SUI...",
+        detail: `Transferring remaining balance to ${walletAddress.substring(0, 10)}…`,
+      });
+      const result = await withdrawAgent(agent.id, walletAddress);
+      if (result.success) {
+        const b = await getAgentBalance(agent.id);
+        setBalance(b);
+        onUpdateAgent(agent.id, {});
+        setWithdrawModalOpen(false);
+        addLogEntry({
+          agentId: agent.id,
+          agentName,
+          type: "stream",
+          title: `Withdrew ${result.withdrawnSui.toFixed(4)} SUI`,
+          detail: `Tx: ${result.digest?.substring(0, 16) || "—"}…`,
+          meta: {
+            digest: result.digest || "—",
+            amount: `${result.withdrawnSui.toFixed(4)} SUI`,
+            remaining: `${result.remainingSui.toFixed(4)} SUI`,
+          },
+        });
+        addToast({
+          variant: "success",
+          title: "Withdrawal successful",
+          message: `${result.withdrawnSui.toFixed(4)} SUI transferred to your wallet.`,
+        });
+      }
+    } catch (err: any) {
+      const errorMessage = err.message || "Unknown error";
+      addLogEntry({
+        agentId: agent.id,
+        agentName,
+        type: "error",
+        title: "Withdrawal failed",
+        detail: errorMessage,
+      });
+      setActionError(errorMessage);
+      addToast({
+        variant: "error",
+        title: "Withdrawal failed",
+        message: errorMessage,
       });
     } finally {
       setLoadingAction(null);
@@ -798,6 +862,15 @@ export default function AgentDetailPage({
                 Fund
               </button>
               <button
+                onClick={() => setWithdrawModalOpen(true)}
+                disabled={liveBalanceSui <= 0.01}
+                title={liveBalanceSui <= 0.01 ? 'Insufficient balance to withdraw' : 'Withdraw SUI to your wallet'}
+                className="px-3 py-2.5 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-xs font-sans font-bold transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ArrowDownToLine className="w-3 h-3" />
+                Withdraw
+              </button>
+              <button
                 onClick={handleRefreshBalance}
                 disabled={loadingAction === "refresh"}
                 className="px-3 py-2.5 bg-white hover:bg-stone-100 text-stone-600 border border-stone-200 rounded-lg text-xs font-sans font-bold transition-all flex items-center justify-center gap-1.5"
@@ -1094,6 +1167,105 @@ export default function AgentDetailPage({
                     )}
                     Delete
                     
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Withdraw Modal */}
+      <AnimatePresence>
+        {withdrawModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+            onClick={() => setWithdrawModalOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#FAF9F6] border border-stone-200 rounded-2xl p-6 w-full max-w-md shadow-xl"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-sans text-lg font-bold text-[#1C1A17]">
+                  Withdraw SUI
+                </h3>
+                <button
+                  onClick={() => setWithdrawModalOpen(false)}
+                  className="p-1.5 text-stone-400 hover:text-stone-600"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-sm text-stone-500 mb-4">
+                Transfer remaining SUI from <span className="font-bold">{agentName}</span>'s wallet back to your connected wallet.
+              </p>
+
+              <div className="space-y-4">
+                <div className="p-4 bg-white border border-stone-100 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-sans text-stone-400">Agent wallet balance</span>
+                    <span className="font-sans text-sm font-bold text-[#1C1A17]">
+                      {liveBalanceSui.toFixed(4)} SUI
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-sans text-stone-400">Gas reserve (kept)</span>
+                    <span className="text-xs font-mono text-stone-500">~0.01 SUI</span>
+                  </div>
+                  <div className="h-px bg-stone-100" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-sans text-stone-500 font-medium">You will receive</span>
+                    <span className="font-sans text-sm font-bold text-purple-700">
+                      {Math.max(0, liveBalanceSui - 0.01).toFixed(4)} SUI
+                    </span>
+                  </div>
+                </div>
+
+                {walletAddress && (
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                      <span className="text-[10px] font-mono text-purple-700 truncate">{walletAddress}</span>
+                    </div>
+                    <p className="text-[10px] font-sans text-purple-500 mt-1">Recipient: your connected wallet</p>
+                  </div>
+                )}
+
+                {!walletAddress && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span className="text-xs font-sans text-amber-700">Connect your wallet first</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setWithdrawModalOpen(false)}
+                    className="flex-1 py-3 px-6 bg-transparent hover:bg-[#1C1A17]/5 text-[#1C1A17] border border-[#1C1A17]/30 rounded-full text-sm font-sans font-bold transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleWithdraw}
+                    disabled={loadingAction === "withdraw" || liveBalanceSui <= 0.01 || !walletAddress}
+                    className="flex-1 py-3 px-6 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-sans text-sm font-bold rounded-full flex items-center justify-center gap-2 transition-all"
+                  >
+                    {loadingAction === "withdraw" ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <ArrowDownToLine className="w-4 h-4" />
+                    )}
+                    Withdraw
                   </button>
                 </div>
               </div>

@@ -76,6 +76,7 @@ export default function AgentCreatePage({
           description: agent.description,
           purpose: agent.purpose,
           budgetMist: Math.floor(agent.budgetSui * 1_000_000_000),
+          ownerAddress: walletAddress,
         }),
       });
       if (!res.ok) {
